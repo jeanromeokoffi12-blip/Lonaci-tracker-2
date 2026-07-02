@@ -1,4 +1,12 @@
-// ══════════════════════════════════════
+const chromium = require('@sparticuz/chromium');
+const puppeteer = require('puppeteer-core');
+
+const browser = await puppeteer.launch({
+  args: chromium.args,
+  defaultViewport: chromium.defaultViewport,
+  executablePath: await chromium.executablePath(),
+  headless: chromium.headless,
+});/ ══════════════════════════════════════
 // LOTTO-CI SCRAPER — server.js
 // Scrape lotobonheur.ci (Next.js SPA) avec Puppeteer
 // ══════════════════════════════════════
