@@ -1,18 +1,12 @@
-const chromium = require('@sparticuz/chromium');
-const puppeteer = require('puppeteer-core');
 
-const browser = await puppeteer.launch({
-  args: chromium.args,
-  defaultViewport: chromium.defaultViewport,
-  executablePath: await chromium.executablePath(),
-  headless: chromium.headless,
-});/ ══════════════════════════════════════
+// ══════════════════════════════════════
 // LOTTO-CI SCRAPER — server.js
 // Scrape lotobonheur.ci (Next.js SPA) avec Puppeteer
 // ══════════════════════════════════════
+const chromium = require('@sparticuz/chromium');
+const puppeteer = require('puppeteer-core');
 const express = require('express');
 const cors = require('cors');
-const puppeteer = require('puppeteer');
 
 const app = express();
 app.use(cors());
@@ -21,19 +15,18 @@ const PORT = process.env.PORT || 3000;
 const TARGET_URL = 'https://lotobonheur.ci/resultats';
 
 // Options de lancement compatibles avec l'environnement Render.com
-const LAUNCH_OPTIONS = {
-  headless: 'new',
-  args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-gpu'
-  ]
-};
+async function getLaunchOptions() {
+  return {
+    args: chromium.args,
+    defaultViewport: chromium.defaultViewport,
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless,
+  };
+}
 
 // ── Fonction utilitaire : ouvre une page et attend le rendu JS ──
 async function chargerPage(url, selectorAttendu) {
-  const browser = await puppeteer.launch(LAUNCH_OPTIONS);
+  const browser = await puppeteer.launch(await getLaunchOptions());
   try {
     const page = await browser.newPage();
     await page.setUserAgent(
@@ -77,8 +70,9 @@ app.get('/api/debug', async (req, res) => {
 // /api/resultats — scraper réel (À CALIBRER après inspection /api/debug)
 // ══════════════════════════════════════
 app.get('/api/resultats', async (req, res) => {
+  let browser;
   try {
-    const browser = await puppeteer.launch(LAUNCH_OPTIONS);
+    browser = await puppeteer.launch(await getLaunchOptions());
     const page = await browser.newPage();
     await page.setUserAgent(
       'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36'
@@ -102,6 +96,7 @@ app.get('/api/resultats', async (req, res) => {
     await browser.close();
     res.json({ source: TARGET_URL, recupere_le: new Date().toISOString(), resultats });
   } catch (e) {
+    if (browser) await browser.close();
     res.status(500).json({ error: e.message });
   }
 });
