@@ -77,7 +77,10 @@ app.get('/api/resultats', async (req, res) => {
     await page.setUserAgent(
       'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36'
     );
-    await page.goto(TARGET_URL, { waitUntil: 'networkidle2', timeout: 30000 });
+    await page.goto('https://lotobonheur.ci/resultats', { waitUntil: 'networkidle2', timeout: 30000 });
+await page.waitForTimeout(5000); // laisse le JS Next.js finir de charger les résultats
+const html = await page.content(); // capture le HTML APRÈS rendu
+res.send(html);
 
     // ⚠️ SÉLECTEURS PROVISOIRES — à ajuster avec ce que /api/debug révèle.
     // Idée générale : chaque bloc de tirage contient un nom de jeu + une liste
