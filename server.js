@@ -1,5 +1,5 @@
 // ══════════════════════════════════════
-// LOTTO-CI SCRAPER — server.js (v2)
+// LOTTO-CI SCRAPER — server.js (v3 - sélecteurs corrigés)
 // Scrape lotobonheur.ci (Next.js SPA) avec Puppeteer
 // ══════════════════════════════════════
 const chromium = require('@sparticuz/chromium');
@@ -40,11 +40,7 @@ async function getBrowser() {
 }
 
 // ══════════════════════════════════════
-// /api/debug-network — CAPTURE TOUS LES APPELS API DE LA PAGE
-// C'est la route clé : elle nous dit QUEL endpoint le site
-// appelle réellement quand on sélectionne un tirage, et ce
-// qu'il répond (JSON). Une fois qu'on connaît cet endpoint,
-// on peut l'appeler directement sans même passer par Puppeteer.
+// /api/debug-network — capture les appels JSON réseau de la page
 // ══════════════════════════════════════
 app.get('/api/debug-network', async (req, res) => {
   const browser = await getBrowser();
@@ -56,7 +52,6 @@ app.get('/api/debug-network', async (req, res) => {
       'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36'
     );
 
-    // Écoute toutes les réponses réseau, on garde celles qui ressemblent à une API (JSON)
     page.on('response', async (response) => {
       try {
         const url = response.url();
@@ -72,19 +67,15 @@ app.get('/api/debug-network', async (req, res) => {
           capturedCalls.push({ url, status, body });
         }
       } catch (e) {
-        // ignore les réponses qui ne peuvent pas être lues (redirections, etc.)
+        // ignore
       }
     });
 
     await page.goto(TARGET_URL, { waitUntil: 'networkidle2', timeout: 30000 });
 
-    // Essaie de cliquer sur le sélecteur de mois/tirage pour déclencher le chargement des données.
-    // ⚠️ Sélecteur provisoire — on ajustera une fois qu'on voit le vrai DOM.
     try {
-      // Le menu déroulant "Choisir..." est probablement un <select> ou un composant custom.
       const select = await page.$('select');
       if (select) {
-        // Sélectionne la 2e option (index 1, la 1ere étant "Choisir...")
         await page.evaluate((sel) => {
           if (sel.options.length > 1) {
             sel.selectedIndex = 1;
@@ -92,15 +83,13 @@ app.get('/api/debug-network', async (req, res) => {
           }
         }, select);
       } else {
-        // Sinon, tente un clic générique sur un élément contenant "Choisir"
         const [el] = await page.$x("//*[contains(text(), 'Choisir')]");
         if (el) await el.click();
       }
     } catch (e) {
-      // on continue même si l'interaction échoue — on veut quand même voir ce qui a été capturé
+      // continue
     }
 
-    // Laisse le temps aux appels réseau déclenchés de se terminer
     await new Promise(resolve => setTimeout(resolve, 4000));
 
     res.json({
@@ -116,7 +105,7 @@ app.get('/api/debug-network', async (req, res) => {
 });
 
 // ══════════════════════════════════════
-// /api/debug — renvoie le HTML brut après rendu JS (diagnostic visuel)
+// /api/debug — renvoie le HTML brut après rendu JS
 // ══════════════════════════════════════
 app.get('/api/debug', async (req, res) => {
   const browser = await getBrowser();
@@ -138,7 +127,8 @@ app.get('/api/debug', async (req, res) => {
 });
 
 // ══════════════════════════════════════
-// /api/resultats — scraper réel (à finaliser une fois l'endpoint connu)
+// /api/resultats — scraper réel avec sélecteurs calibrés
+// sur la vraie structure Tailwind de lotobonheur.ci
 // ══════════════════════════════════════
 app.get('/api/resultats', async (req, res) => {
   let page;
@@ -151,16 +141,45 @@ app.get('/api/resultats', async (req, res) => {
     await page.goto(TARGET_URL, { waitUntil: 'networkidle2', timeout: 30000 });
     await new Promise(resolve => setTimeout(resolve, 5000));
 
-    // ⚠️ SÉLECTEURS PROVISOIRES — à ajuster avec /api/debug-network
+    // Sélecteurs calibrés sur la structure réelle (classes Tailwind génériques,
+    // pas de classes sémantiques comme "draw" ou "result")
     const resultats = await page.evaluate(() => {
-      const blocs = Array.from(document.querySelectorAll('[class*="draw"], [class*="result"], [class*="tirage"]'));
+      // Chaque tirage = un div.flex.flex-col.space-y-2 qui contient un nom en gras
+      // ET au moins une boule verte (bg-green-700). On filtre sur ces deux critères
+      // pour éviter d'attraper d'autres blocs similaires ailleurs sur la page.
+      const candidats = Array.from(document.querySelectorAll('div.flex.flex-col.space-y-2'));
+
+      const blocs = candidats.filter(bloc =>
+        bloc.querySelector('div.mt-2.font-bold.text-sm') &&
+        bloc.querySelector('div.bg-green-700')
+      );
+
       return blocs.map(bloc => {
-        const nom = bloc.querySelector('[class*="name"], h2, h3')?.textContent?.trim() || 'N/A';
-        const nombres = Array.from(bloc.querySelectorAll('[class*="number"], [class*="ball"]'))
-          .map(el => parseInt(el.textContent.trim(), 10))
-          .filter(n => !isNaN(n));
-        return { nom, nombres };
-      }).filter(b => b.nom && b.nombres.length > 0);
+        const nom = bloc.querySelector('div.mt-2.font-bold.text-sm')?.textContent?.trim() || 'N/A';
+
+        // Chaque ligne "Gagnants :" / "Machine :" est un
+        // div.flex.flex-row.space-x-2.justify-start.items-center
+        const lignes = Array.from(
+          bloc.querySelectorAll('div.flex.flex-row.space-x-2.justify-start.items-center')
+        );
+
+        const extraireNumeros = (ligne) =>
+          Array.from(ligne.querySelectorAll('div.bg-green-700 p'))
+            .map(p => parseInt(p.textContent.trim(), 10))
+            .filter(n => !isNaN(n));
+
+        let gagnants = [];
+        let machine = [];
+
+        lignes.forEach(ligne => {
+          const label = ligne.querySelector('h5')?.textContent?.trim().toLowerCase() || '';
+          const nums = extraireNumeros(ligne);
+          if (label.includes('gagnant')) gagnants = nums;
+          else if (label.includes('machine')) machine = nums;
+        });
+
+        return { nom, gagnants, machine };
+      }).filter(b => b.nom !== 'N/A' && b.gagnants.length > 0);
     });
 
     res.json({ source: TARGET_URL, recupere_le: new Date().toISOString(), resultats });
