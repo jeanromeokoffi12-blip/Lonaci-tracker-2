@@ -1,204 +1,113 @@
-// ══════════════════════════════════════
-// LOTTO-CI SCRAPER — server.js (v3 - sélecteurs corrigés)
-// Scrape lotobonheur.ci (Next.js SPA) avec Puppeteer
-// ══════════════════════════════════════
-const chromium = require('@sparticuz/chromium');
-const puppeteer = require('puppeteer-core');
 const express = require('express');
-const cors = require('cors');
+const puppeteer = require('puppeteer-core');
+const chromium = require('@sparticuz/chromium');
 
 const app = express();
-app.use(cors());
-
 const PORT = process.env.PORT || 3000;
-const TARGET_URL = 'https://lotobonheur.ci/resultats';
 
-// ── Singleton navigateur ──
+// ---- Singleton browser + verrou de concurrence ----
 let browserInstance = null;
-let launchingPromise = null;
+let launching = null;
 
 async function getBrowser() {
   if (browserInstance && browserInstance.isConnected()) {
     return browserInstance;
   }
-  if (launchingPromise) {
-    return launchingPromise;
+  if (launching) {
+    return launching;
   }
-  launchingPromise = (async () => {
-    const executablePath = await chromium.executablePath();
-    const browser = await puppeteer.launch({
+  launching = (async () => {
+    browserInstance = await puppeteer.launch({
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
-      executablePath,
+      executablePath: await chromium.executablePath(),
       headless: chromium.headless,
     });
-    browserInstance = browser;
-    launchingPromise = null;
-    return browser;
+    launching = null;
+    return browserInstance;
   })();
-  return launchingPromise;
+  return launching;
 }
 
-// ══════════════════════════════════════
-// /api/debug-network — capture les appels JSON réseau de la page
-// ══════════════════════════════════════
-app.get('/api/debug-network', async (req, res) => {
-  const browser = await getBrowser();
-  const page = await browser.newPage();
-  const capturedCalls = [];
+// ---- Scraping ----
+async function scrapeResultats(page) {
+  await page.goto('https://lotobonheur.ci/resultats', {
+    waitUntil: 'networkidle2',
+    timeout: 60000,
+  });
 
-  try {
-    await page.setUserAgent(
-      'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36'
-    );
+  await page.waitForSelector('.bg-green-700.rounded-full', { timeout: 30000 });
 
-    page.on('response', async (response) => {
-      try {
-        const url = response.url();
-        const contentType = response.headers()['content-type'] || '';
-        if (contentType.includes('application/json') && !url.includes('_next/static')) {
-          const status = response.status();
-          let body = null;
-          try {
-            body = await response.json();
-          } catch (e) {
-            body = '[corps non-JSON ou vide]';
-          }
-          capturedCalls.push({ url, status, body });
+  const resultats = await page.evaluate(() => {
+    const semaines = document.querySelectorAll('div.pb-5');
+    const data = [];
+
+    semaines.forEach((semaineDiv) => {
+      const jourH5 = semaineDiv.querySelector('h5');
+      const jourLabel = jourH5 ? jourH5.textContent.trim() : null;
+
+      const grid = semaineDiv.querySelector('.grid');
+      if (!grid) return;
+
+      const cartes = grid.querySelectorAll(':scope > div');
+
+      cartes.forEach((carte) => {
+        const titreEl = carte.querySelector('h5');
+        const tirageNom = titreEl ? titreEl.textContent.trim() : null;
+
+        const boules = carte.querySelectorAll('.bg-green-700.rounded-full');
+        const numeros = Array.from(boules).map((b) => b.textContent.trim());
+
+        if (tirageNom && numeros.length > 0) {
+          data.push({ jour: jourLabel, tirage: tirageNom, numeros });
         }
-      } catch (e) {
-        // ignore
-      }
+      });
     });
 
-    await page.goto(TARGET_URL, { waitUntil: 'networkidle2', timeout: 30000 });
+    return data;
+  });
 
-    try {
-      const select = await page.$('select');
-      if (select) {
-        await page.evaluate((sel) => {
-          if (sel.options.length > 1) {
-            sel.selectedIndex = 1;
-            sel.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-        }, select);
-      } else {
-        const [el] = await page.$x("//*[contains(text(), 'Choisir')]");
-        if (el) await el.click();
-      }
-    } catch (e) {
-      // continue
-    }
+  return resultats;
+}
 
-    await new Promise(resolve => setTimeout(resolve, 4000));
-
-    res.json({
-      note: 'Liste de tous les appels JSON capturés pendant le chargement + interaction',
-      nombre_appels: capturedCalls.length,
-      appels: capturedCalls,
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  } finally {
-    await page.close();
-  }
+// ---- Routes ----
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', message: 'LONACI Tracker API en ligne' });
 });
 
-// ══════════════════════════════════════
-// /api/debug — renvoie le HTML brut après rendu JS
-// ══════════════════════════════════════
-app.get('/api/debug', async (req, res) => {
-  const browser = await getBrowser();
-  const page = await browser.newPage();
-  try {
-    await page.setUserAgent(
-      'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36'
-    );
-    await page.goto(TARGET_URL, { waitUntil: 'networkidle2', timeout: 30000 });
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    const html = await page.content();
-    res.set('Content-Type', 'text/plain; charset=utf-8');
-    res.send(html.slice(0, 50000));
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  } finally {
-    await page.close();
-  }
-});
-
-// ══════════════════════════════════════
-// /api/resultats — scraper réel avec sélecteurs calibrés
-// sur la vraie structure Tailwind de lotobonheur.ci
-// ══════════════════════════════════════
 app.get('/api/resultats', async (req, res) => {
-  let page;
+  let page = null;
   try {
     const browser = await getBrowser();
     page = await browser.newPage();
-    await page.setUserAgent(
-      'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36'
-    );
-    await page.goto(TARGET_URL, { waitUntil: 'networkidle2', timeout: 30000 });
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    // Sélecteurs calibrés sur la structure réelle (classes Tailwind génériques,
-    // pas de classes sémantiques comme "draw" ou "result")
-    const resultats = await page.evaluate(() => {
-      // Chaque tirage = un div.flex.flex-col.space-y-2 qui contient un nom en gras
-      // ET au moins une boule verte (bg-green-700). On filtre sur ces deux critères
-      // pour éviter d'attraper d'autres blocs similaires ailleurs sur la page.
-      const candidats = Array.from(document.querySelectorAll('div.flex.flex-col.space-y-2'));
-
-      const blocs = candidats.filter(bloc =>
-        bloc.querySelector('div.mt-2.font-bold.text-sm') &&
-        bloc.querySelector('div.bg-green-700')
-      );
-
-      return blocs.map(bloc => {
-        const nom = bloc.querySelector('div.mt-2.font-bold.text-sm')?.textContent?.trim() || 'N/A';
-
-        // Chaque ligne "Gagnants :" / "Machine :" est un
-        // div.flex.flex-row.space-x-2.justify-start.items-center
-        const lignes = Array.from(
-          bloc.querySelectorAll('div.flex.flex-row.space-x-2.justify-start.items-center')
-        );
-
-        const extraireNumeros = (ligne) =>
-          Array.from(ligne.querySelectorAll('div.bg-green-700 p'))
-            .map(p => parseInt(p.textContent.trim(), 10))
-            .filter(n => !isNaN(n));
-
-        let gagnants = [];
-        let machine = [];
-
-        lignes.forEach(ligne => {
-          const label = ligne.querySelector('h5')?.textContent?.trim().toLowerCase() || '';
-          const nums = extraireNumeros(ligne);
-          if (label.includes('gagnant')) gagnants = nums;
-          else if (label.includes('machine')) machine = nums;
-        });
-
-        return { nom, gagnants, machine };
-      }).filter(b => b.nom !== 'N/A' && b.gagnants.length > 0);
-    });
-
-    res.json({ source: TARGET_URL, recupere_le: new Date().toISOString(), resultats });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+    const resultats = await scrapeResultats(page);
+    res.json({ success: true, count: resultats.length, resultats });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   } finally {
     if (page) await page.close();
   }
 });
 
-app.get('/', (req, res) => {
-  res.send('Lotto-CI Scraper actif. Routes : /api/debug, /api/debug-network, /api/resultats');
+app.get('/api/debug', async (req, res) => {
+  let page = null;
+  try {
+    const browser = await getBrowser();
+    page = await browser.newPage();
+    await page.goto('https://lotobonheur.ci/resultats', {
+      waitUntil: 'networkidle2',
+      timeout: 60000,
+    });
+    const html = await page.content();
+    res.set('Content-Type', 'text/plain');
+    res.send(html);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    if (page) await page.close();
+  }
 });
 
 app.listen(PORT, () => {
-  console.log(`Serveur lancé sur le port ${PORT}`);
-});
-
-process.on('SIGTERM', async () => {
-  if (browserInstance) await browserInstance.close();
-  process.exit(0);
+  console.log(`Serveur démarré sur le port ${PORT}`);
 });
