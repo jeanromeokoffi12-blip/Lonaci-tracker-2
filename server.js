@@ -52,14 +52,32 @@ async function scrapeResultats(page) {
       const cartes = grid.querySelectorAll(':scope > div');
 
       cartes.forEach((carte) => {
-        const titreEl = carte.querySelector('h5');
+        const titreEl = carte.querySelector('div.mt-2.font-bold.text-sm');
         const tirageNom = titreEl ? titreEl.textContent.trim() : null;
 
-        const boules = carte.querySelectorAll('.bg-green-700.rounded-full');
-        const numeros = Array.from(boules).map((b) => b.textContent.trim());
+        const lignes = carte.querySelectorAll(
+          'div.flex.flex-row.space-x-2.justify-start.items-center'
+        );
 
-        if (tirageNom && numeros.length > 0) {
-          data.push({ jour: jourLabel, tirage: tirageNom, numeros });
+        let gagnants = [];
+        let machine = [];
+
+        lignes.forEach((ligne) => {
+          const label = ligne.querySelector('h5');
+          if (!label) return;
+          const boules = Array.from(
+            ligne.querySelectorAll('.bg-green-700.rounded-full p')
+          ).map((p) => p.textContent.trim());
+
+          if (label.textContent.includes('Gagnants')) {
+            gagnants = boules;
+          } else if (label.textContent.includes('Machine')) {
+            machine = boules;
+          }
+        });
+
+        if (tirageNom && gagnants.length > 0) {
+          data.push({ jour: jourLabel, tirage: tirageNom, gagnants, machine });
         }
       });
     });
