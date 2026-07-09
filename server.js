@@ -1,5 +1,5 @@
 const parseJourEnDate = require('./parseJourEnDate'); express = require('express');
-const puppeteer = require('puppeteer-core');
+const express = require('express');
 const chromium = require('@sparticuz/chromium');
 
 const app = express();
