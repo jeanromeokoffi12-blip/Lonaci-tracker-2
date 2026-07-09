@@ -12,6 +12,24 @@
   "dependencies": {
     "express": "^4.19.2",
     "cors": "^2.8.5",
+    "@supabase/supabase-js": "^2.45.0",
+    "puppeteer-core": "^22.0.0",
+    "@sparticuz/chromium": "^127.0.0"
+  }
+}
+  "name": "lotto-ci-scraper",
+  "version": "1.0.0",
+  "description": "Scraper Puppeteer pour lotobonheur.ci - LONACI TRACKER PRO",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": "20.x"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
 "puppeteer-core": "^22.0.0",
 "@sparticuz/chromium": "^127.0.0"
   }
