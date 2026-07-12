@@ -1,11 +1,17 @@
-
 const parseJourEnDate = require('./parseJourEnDate');
 const express = require('express');
 const puppeteer = require('puppeteer-core');
 const chromium = require('@sparticuz/chromium');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// ---- Supabase ----
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
 
 // ---- Singleton browser + verrou de concurrence ----
 let browserInstance = null;
@@ -90,6 +96,23 @@ async function scrapeResultats(page) {
   return resultats;
 }
 
+// ---- Sauvegarde Supabase ----
+async function sauvegarderTirages(resultats) {
+  const rows = resultats.map((r) => ({
+    date_tirage: parseJourEnDate(r.jour),
+    tirage: r.tirage,
+    gagnants: r.gagnants,
+    machine: r.machine,
+  }));
+
+  const { data, error } = await supabase
+    .from('tirages')
+    .upsert(rows, { onConflict: 'date_tirage,tirage' });
+
+  if (error) throw error;
+  return data;
+}
+
 // ---- Routes ----
 app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'LONACI Tracker API en ligne' });
@@ -101,11 +124,50 @@ app.get('/api/resultats', async (req, res) => {
     const browser = await getBrowser();
     page = await browser.newPage();
     const resultats = await scrapeResultats(page);
+
+    try {
+      await sauvegarderTirages(resultats);
+    } catch (saveErr) {
+      console.error('Erreur sauvegarde Supabase:', saveErr.message);
+    }
+
     res.json({ success: true, count: resultats.length, resultats });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   } finally {
     if (page) await page.close();
+  }
+});
+
+app.get('/api/historique', async (req, res) => {
+  try {
+    const { date, tirage, limit } = req.query;
+
+    let query = supabase
+      .from('tirages')
+      .select('*')
+      .order('date_tirage', { ascending: false });
+
+    if (date) query = query.eq('date_tirage', date);
+    if (tirage) query = query.eq('tirage', tirage);
+    query = query.limit(limit ? parseInt(limit) : 100);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    res.json({ success: true, count: data.length, historique: data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/health-db', async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('tirages').select('*').limit(1);
+    if (error) throw error;
+    res.json({ success: true, message: 'Connexion Supabase OK' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
