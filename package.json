@@ -9,11 +9,13 @@
   "engines": {
     "node": "20.x"
   },
-  "dependencies": {
+ "dependencies": {
     "express": "^4.19.2",
     "cors": "^2.8.5",
     "@supabase/supabase-js": "^2.45.0",
     "puppeteer-core": "^22.0.0",
-    "@sparticuz/chromium": "^127.0.0"
+    "@sparticuz/chromium": "^127.0.0",
+    "ws": "^8.18.0"
+} 
   }
 }
