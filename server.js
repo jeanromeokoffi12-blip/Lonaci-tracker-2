@@ -119,7 +119,9 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'LONACI Tracker API en ligne' });
 });
 
-app.get('/api/resultats', async (req, res) => {
+app.getapp.get('/api/ping', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});('/api/resultats', async (req, res) => {
   let page = null;
   try {
     const browser = await getBrowser();
