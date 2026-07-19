@@ -102,8 +102,8 @@ async function sauvegarderTirages(resultats) {
   const rows = resultats.map((r) => ({
     date_tirage: parseJourEnDate(r.jour),
     tirage: r.tirage,
-    gagnants: r.gagnants,
-    machine: r.machine,
+    numeros_gagnants: r.gagnants,
+    numeros_machine: r.machine,
   }));
 
   const { data, error } = await supabase
@@ -120,81 +120,4 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api/ping', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-app.get('/api/resultats', async (req, res) => {
-  let page = null;
-  try {
-    const browser = await getBrowser();
-    page = await browser.newPage();
-    const resultats = await scrapeResultats(page);
-
-    try {
-      await sauvegarderTirages(resultats);
-    } catch (saveErr) {
-      console.error('Erreur sauvegarde Supabase:', saveErr.message);
-    }
-
-    res.json({ success: true, count: resultats.length, resultats });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  } finally {
-    if (page) await page.close();
-  }
-});
-
-app.get('/api/historique', async (req, res) => {
-  try {
-    const { date, tirage, limit } = req.query;
-
-    let query = supabase
-      .from('tirages')
-      .select('*')
-      .order('date_tirage', { ascending: false });
-
-    if (date) query = query.eq('date_tirage', date);
-    if (tirage) query = query.eq('tirage', tirage);
-    query = query.limit(limit ? parseInt(limit) : 100);
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    res.json({ success: true, count: data.length, historique: data });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.get('/api/health-db', async (req, res) => {
-  try {
-    const { data, error } = await supabase.from('tirages').select('*').limit(1);
-    if (error) throw error;
-    res.json({ success: true, message: 'Connexion Supabase OK' });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.get('/api/debug', async (req, res) => {
-  let page = null;
-  try {
-    const browser = await getBrowser();
-    page = await browser.newPage();
-    await page.goto('https://lotobonheur.ci/resultats', {
-      waitUntil: 'networkidle2',
-      timeout: 60000,
-    });
-    const html = await page.content();
-    res.set('Content-Type', 'text/plain');
-    res.send(html);
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  } finally {
-    if (page) await page.close();
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`Serveur démarré sur le port ${PORT}`);
-});
+  res.status(200).json({ status: 'o
