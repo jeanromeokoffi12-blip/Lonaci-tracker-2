@@ -97,9 +97,28 @@ async function scrapeResultats(page) {
   return resultats;
 }
 
+// ---- Déduplication ----
+// Le scraping peut renvoyer plusieurs fois le même tirage (même jour + même nom
+// de tirage) car la page liste parfois les résultats sur plusieurs blocs.
+// Supabase refuse un upsert avec ON CONFLICT si la même clé unique
+// (date_tirage, tirage) apparaît plusieurs fois dans le même batch
+// ("ON CONFLICT DO UPDATE command cannot affect row a second time").
+// On déduplique donc ici avant toute insertion, en gardant la dernière
+// occurrence rencontrée pour chaque clé.
+function dedupResultats(resultats) {
+  const seen = new Map();
+  for (const r of resultats) {
+    const key = `${r.jour}__${r.tirage}`;
+    seen.set(key, r);
+  }
+  return Array.from(seen.values());
+}
+
 // ---- Sauvegarde Supabase ----
 async function sauvegarderTirages(resultats) {
-  const rows = resultats.map((r) => ({
+  const resultatsUniques = dedupResultats(resultats);
+
+  const rows = resultatsUniques.map((r) => ({
     date_tirage: parseJourEnDate(r.jour),
     tirage: r.tirage,
     numeros_gagnants: r.gagnants,
