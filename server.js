@@ -38,7 +38,38 @@ async function getBrowser() {
   return launching;
 }
 
-// ---- Scraping ----
+// ---- NOUVEAU : appel direct de l'API interne de lotobonheur.ci ----
+// Découvert via interception PCAPdroid : le site web appelle lui-même
+// cette API pour afficher les résultats. Si elle répond correctement
+// depuis le serveur (pas de blocage 403/Cloudflare), on pourra abandonner
+// Puppeteer complètement.
+async function fetchResultatsAPI(monthYear, drawType = 'Tous les tirages') {
+  const url = `https://lotobonheur.ci/api/results?monthYear=${encodeURIComponent(monthYear)}&drawType=${encodeURIComponent(drawType)}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36',
+      'Accept': 'application/json',
+      'Referer': 'https://lotobonheur.ci/resultats',
+      'Accept-Language': 'fr-FR,fr;q=0.9',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`API a répondu avec le statut ${response.status} ${response.statusText}`);
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await response.text();
+    throw new Error(`Réponse non-JSON reçue (content-type: ${contentType}). Début: ${text.slice(0, 300)}`);
+  }
+
+  return response.json();
+}
+
+// ---- Scraping Puppeteer (fallback, inchangé) ----
 async function scrapeResultats(page) {
   await page.goto('https://lotobonheur.ci/resultats', {
     waitUntil: 'networkidle2',
@@ -98,13 +129,6 @@ async function scrapeResultats(page) {
 }
 
 // ---- Déduplication ----
-// Le scraping peut renvoyer plusieurs fois le même tirage (même jour + même nom
-// de tirage) car la page liste parfois les résultats sur plusieurs blocs.
-// Supabase refuse un upsert avec ON CONFLICT si la même clé unique
-// (date_tirage, tirage) apparaît plusieurs fois dans le même batch
-// ("ON CONFLICT DO UPDATE command cannot affect row a second time").
-// On déduplique donc ici avant toute insertion, en gardant la dernière
-// occurrence rencontrée pour chaque clé.
 function dedupResultats(resultats) {
   const seen = new Map();
   for (const r of resultats) {
@@ -140,6 +164,21 @@ app.get('/', (req, res) => {
 
 app.get('/api/ping', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// NOUVELLE ROUTE DE TEST : appelle l'API interne et renvoie le JSON brut,
+// sans rien parser ni sauvegarder. Sert uniquement à inspecter la structure
+// réelle des données avant d'adapter le parsing.
+// Exemple: /api/debug-api?monthYear=décembre 2021&drawType=Tous les tirages
+app.get('/api/debug-api', async (req, res) => {
+  try {
+    const monthYear = req.query.monthYear || 'décembre 2021';
+    const drawType = req.query.drawType || 'Tous les tirages';
+    const data = await fetchResultatsAPI(monthYear, drawType);
+    res.json({ success: true, raw: data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 app.get('/api/resultats', async (req, res) => {
