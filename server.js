@@ -38,11 +38,7 @@ async function getBrowser() {
   return launching;
 }
 
-// ---- NOUVEAU : appel direct de l'API interne de lotobonheur.ci ----
-// Découvert via interception PCAPdroid : le site web appelle lui-même
-// cette API pour afficher les résultats. Si elle répond correctement
-// depuis le serveur (pas de blocage 403/Cloudflare), on pourra abandonner
-// Puppeteer complètement.
+// ---- Appel direct de l'API interne de lotobonheur.ci ----
 async function fetchResultatsAPI(monthYear, drawType = 'Tous les tirages') {
   const url = `https://lotobonheur.ci/api/results?monthYear=${encodeURIComponent(monthYear)}&drawType=${encodeURIComponent(drawType)}`;
 
@@ -67,6 +63,95 @@ async function fetchResultatsAPI(monthYear, drawType = 'Tous les tirages') {
   }
 
   return response.json();
+}
+
+// ---- Détermine le mois/année courant en français, ex: "juillet 2026" ----
+function getMonthYearFR(date = new Date()) {
+  const mois = [
+    'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+  ];
+  return `${mois[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+// ---- Convertit "DD/MM" + contexte de semaine (startDate/endDate "DD/MM/YYYY")
+//      en date ISO "YYYY-MM-DD", en gérant les semaines à cheval sur deux années ----
+function construireDateISO(jourMoisStr, startDateStr, endDateStr) {
+  const [jj, mm] = jourMoisStr.split('/');
+  const [, , anneeDebut] = startDateStr.split('/');
+  const [, moisFin, anneeFin] = endDateStr.split('/');
+
+  // Si le mois du jour correspond au mois de fin de semaine, on prend l'année de fin,
+  // sinon l'année de début (cas des semaines à cheval sur deux mois/années).
+  const annee = mm === moisFin ? anneeFin : anneeDebut;
+
+  return `${annee}-${mm}-${jj}`;
+}
+
+// ---- Parse la réponse JSON de l'API en une liste plate de tirages ----
+// Structure source: drawsResultsWeekly -> drawResultsDaily -> standardDraws
+function parseApiResponse(apiData) {
+  const resultats = [];
+
+  if (!apiData || !Array.isArray(apiData.drawsResultsWeekly)) {
+    return resultats;
+  }
+
+  for (const semaine of apiData.drawsResultsWeekly) {
+    const { startDate, endDate, drawResultsDaily } = semaine;
+    if (!Array.isArray(drawResultsDaily)) continue;
+
+    for (const jourData of drawResultsDaily) {
+      const dateMatch = (jourData.date || '').match(/(\d{2}\/\d{2})/);
+      if (!dateMatch) continue;
+
+      const dateISO = construireDateISO(dateMatch[1], startDate, endDate);
+      const tirages = jourData.drawResults?.standardDraws || [];
+
+      for (const t of tirages) {
+        if (!t.drawName || t.drawName === '-') continue;
+        if (!t.winningNumbers || t.winningNumbers.includes('.')) continue;
+
+        const gagnants = t.winningNumbers.split(' - ').map((n) => n.trim());
+        const machine =
+          t.machineNumbers && !t.machineNumbers.includes('.')
+            ? t.machineNumbers.split(' - ').map((n) => n.trim())
+            : [];
+
+        resultats.push({
+          date_tirage: dateISO,
+          tirage: t.drawName,
+          gagnants,
+          machine,
+        });
+      }
+    }
+  }
+
+  return resultats;
+}
+
+// ---- Sauvegarde Supabase pour les résultats venant de l'API (date déjà en ISO) ----
+async function sauvegarderTiragesAPI(resultats) {
+  const seen = new Map();
+  for (const r of resultats) {
+    seen.set(`${r.date_tirage}__${r.tirage}`, r);
+  }
+  const resultatsUniques = Array.from(seen.values());
+
+  const rows = resultatsUniques.map((r) => ({
+    date_tirage: r.date_tirage,
+    tirage: r.tirage,
+    numeros_gagnants: r.gagnants,
+    numeros_machine: r.machine,
+  }));
+
+  const { data, error } = await supabase
+    .from('tirages')
+    .upsert(rows, { onConflict: 'date_tirage,tirage' });
+
+  if (error) throw error;
+  return { data, count: rows.length };
 }
 
 // ---- Scraping Puppeteer (fallback, inchangé) ----
@@ -128,7 +213,7 @@ async function scrapeResultats(page) {
   return resultats;
 }
 
-// ---- Déduplication ----
+// ---- Déduplication (utilisée par le flux Puppeteer) ----
 function dedupResultats(resultats) {
   const seen = new Map();
   for (const r of resultats) {
@@ -138,7 +223,7 @@ function dedupResultats(resultats) {
   return Array.from(seen.values());
 }
 
-// ---- Sauvegarde Supabase ----
+// ---- Sauvegarde Supabase pour les résultats venant de Puppeteer (inchangé) ----
 async function sauvegarderTirages(resultats) {
   const resultatsUniques = dedupResultats(resultats);
 
@@ -166,10 +251,6 @@ app.get('/api/ping', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// NOUVELLE ROUTE DE TEST : appelle l'API interne et renvoie le JSON brut,
-// sans rien parser ni sauvegarder. Sert uniquement à inspecter la structure
-// réelle des données avant d'adapter le parsing.
-// Exemple: /api/debug-api?monthYear=décembre 2021&drawType=Tous les tirages
 app.get('/api/debug-api', async (req, res) => {
   try {
     const monthYear = req.query.monthYear || 'décembre 2021';
@@ -181,7 +262,33 @@ app.get('/api/debug-api', async (req, res) => {
   }
 });
 
+// ---- Route principale : API en priorité, Puppeteer en fallback ----
 app.get('/api/resultats', async (req, res) => {
+  const monthYear = req.query.monthYear || getMonthYearFR();
+  const drawType = req.query.drawType || 'Tous les tirages';
+
+  // --- Tentative 1 : API directe ---
+  try {
+    const apiData = await fetchResultatsAPI(monthYear, drawType);
+    const resultats = parseApiResponse(apiData);
+
+    if (resultats.length === 0) {
+      throw new Error('API a répondu mais aucun tirage exploitable trouvé');
+    }
+
+    const { count } = await sauvegarderTiragesAPI(resultats);
+
+    return res.json({
+      success: true,
+      source: 'api',
+      count,
+      resultats,
+    });
+  } catch (apiErr) {
+    console.error('fetchResultatsAPI a échoué, fallback Puppeteer:', apiErr.message);
+  }
+
+  // --- Tentative 2 : Puppeteer (fallback) ---
   let page = null;
   try {
     const browser = await getBrowser();
@@ -194,14 +301,15 @@ app.get('/api/resultats', async (req, res) => {
       console.error('Erreur sauvegarde Supabase:', saveErr.message);
       return res.status(500).json({
         success: false,
+        source: 'puppeteer',
         error: 'Erreur sauvegarde Supabase: ' + saveErr.message,
         resultats,
       });
     }
 
-    res.json({ success: true, count: resultats.length, resultats });
+    res.json({ success: true, source: 'puppeteer', count: resultats.length, resultats });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, source: 'puppeteer', error: err.message });
   } finally {
     if (page) await page.close();
   }
