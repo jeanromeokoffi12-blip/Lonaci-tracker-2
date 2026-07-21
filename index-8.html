@@ -272,6 +272,16 @@ button{cursor:pointer;font-family:system-ui,sans-serif}
 .about-contact-label{font-family:monospace;font-size:9px;color:#64748b;margin-bottom:2px}
 .about-contact-val{font-size:12px;color:#f1f5f9;font-weight:600}
 .about-warn{background:#2d1a00;border:1px solid #fb923c44;border-radius:10px;padding:12px;font-size:11px;color:#fb923c;line-height:1.6;text-align:center}
+/* ── SYNCHRO ── */
+.sync-card{background:#0f172a;border:1px solid rgba(245,200,66,0.25);border-radius:14px;padding:16px;margin-bottom:14px;text-align:center}
+.sync-icon{font-size:36px;margin-bottom:8px}
+.sync-status{font-family:monospace;font-size:11px;color:#64748b;margin-bottom:14px;line-height:1.6}
+.sync-status b{color:#f1f5f9}
+.btn-sync{width:100%;padding:14px;border-radius:10px;border:none;background:linear-gradient(135deg,#f5c842,#fbbf24);color:#0a0f1a;font-weight:800;font-size:14px;letter-spacing:.03em}
+.btn-sync:disabled{opacity:.6}
+.sync-info{font-size:10px;color:#64748b;line-height:1.7;background:#060b14;border-radius:8px;padding:10px 12px;margin-top:12px;text-align:left}
+.sync-info b{color:#22d3ee}
+.sync-last{font-family:monospace;font-size:10px;color:#4ade80;margin-top:8px}
 /* ── MODALS ── */
 </style>
 </head>
@@ -311,7 +321,7 @@ button{cursor:pointer;font-family:system-ui,sans-serif}
 
 <div id="tabs">
   <button class="tab-btn active" onclick="showTab('dashboard',this)">🏠 Bord</button>
-  <button class="tab-btn" onclick="showTab('saisie',this)">✏️ Saisie</button>
+  <button class="tab-btn" onclick="showTab('synchro',this)">🔄 Synchro</button>
   <button class="tab-btn" onclick="showTab('analyse',this)">📊 Alertes</button>
   <button class="tab-btn" onclick="showTab('historique',this)">📅 Historique</button>
   <button class="tab-btn" onclick="showTab('matrices',this)">🔢 Matrices</button>
@@ -333,24 +343,23 @@ button{cursor:pointer;font-family:system-ui,sans-serif}
     </div>
   </div>
 
-  <!-- ══ SAISIE ══ -->
-  <div class="page" id="page-saisie">
-    <div class="date-row">
-      <input type="date" id="saisie-date" class="date-inp">
-      <span class="day-label" id="saisie-dow"></span>
+  <!-- ══ SYNCHRO ══ -->
+  <div class="page" id="page-synchro">
+    <div class="sync-card">
+      <div class="sync-icon">🔄</div>
+      <div class="sync-status" id="sync-status">
+        Synchronise tes résultats directement depuis ton service <b>lonaci-tracker-2</b>.<br>
+        Plus besoin de saisie manuelle — tout vient de ton backend Render.
+      </div>
+      <button class="btn-sync" id="sync-btn" onclick="syncFromAPI()">📡 Synchroniser maintenant</button>
+      <div class="sync-last" id="sync-last"></div>
     </div>
-    <div class="legend">
-      <span><span class="legend-dot" style="background:#4ade80"></span><span style="color:#4ade80">Gagn. Pair</span></span>
-      <span><span class="legend-dot" style="background:#fb923c"></span><span style="color:#fb923c">Gagn. Impair</span></span>
-      <span><span class="legend-dot" style="background:#a78bfa"></span><span style="color:#a78bfa">Mach. Pair</span></span>
-      <span><span class="legend-dot" style="background:#f472b6"></span><span style="color:#f472b6">Mach. Impair</span></span>
+    <div class="sync-info">
+      <b>Source :</b> lonaci-tracker-2.onrender.com/api/historique<br>
+      <b>Comportement :</b> chaque synchro remplace les données locales par la dernière version de la base Supabase.<br>
+      <b>Astuce :</b> lance une synchro avant de consulter Tableau de bord, Alertes, Matrices ou Groupes pour avoir les données à jour.
     </div>
-    <div id="saisie-tirages"></div>
-    <div class="btn-row">
-      <button class="btn-gold" onclick="saveSaisie()">💾 Enregistrer</button>
-      <button class="btn-outline" onclick="clearSaisie()">🔄 Effacer</button>
-    </div>
-    <div class="msg" id="saisie-msg"></div>
+    <div class="msg" id="sync-msg"></div>
   </div>
 
   <!-- ══ ANALYSE ══ -->
@@ -624,6 +633,10 @@ const PROG={0:[{n:"BÉNÉDICTION",h:"10h"},{n:"PRESTIGE",h:"13h"},{n:"AWALÉ",h:
 const JOURS=["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
 const SK="lonaci_tracker_pwa";
 
+// Lookup nom de tirage → heure (utilisé pour afficher l'heure des tirages synchronisés)
+const NAME_TO_HEURE = {};
+Object.values(PROG).forEach(jour=>{jour.forEach(t=>{NAME_TO_HEURE[t.n]=t.h;});});
+
 // ══════════════════════════════════════
 // STORAGE
 // ══════════════════════════════════════
@@ -636,7 +649,7 @@ async function sDel(k){const d=await sLoad();delete d[k];await sSave(d);}
 // ══════════════════════════════════════
 // EXPORT / IMPORT
 // ══════════════════════════════════════
-async function ouvrirExport(){const data=await sLoad();const nb=Object.keys(data).length;if(!nb){alert('Aucune donnée à exporter. Saisis d\'abord des tirages.');return;}const json=JSON.stringify(data);document.getElementById('export-textarea').value=json;document.getElementById('modal-export').style.display='block';}
+async function ouvrirExport(){const data=await sLoad();const nb=Object.keys(data).length;if(!nb){alert('Aucune donnée à exporter. Synchronise d\'abord.');return;}const json=JSON.stringify(data);document.getElementById('export-textarea').value=json;document.getElementById('modal-export').style.display='block';}
 function toutSelectionner(){const ta=document.getElementById('export-textarea');ta.select();ta.setSelectionRange(0,99999);try{document.execCommand('copy');showMsg('backup-msg2','✅ Données copiées ! Colle dans Notes ou WhatsApp.',true);setTimeout(()=>fermerModal('modal-export'),1500);}catch{alert('Appuie longuement sur le texte → Tout sélectionner → Copier');}}
 function fermerModal(id){document.getElementById(id).style.display='none';}
 function ouvrirImport(){document.getElementById('import-textarea').value='';document.getElementById('modal-import').style.display='block';}
@@ -685,7 +698,7 @@ async function renderDashboard() {
       <div class="dash-empty">
         <div class="dash-empty-icon">📊</div>
         <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">Aucune donnée disponible</div>
-        <div style="font-size:11px;color:#64748b">Commence par saisir tes tirages dans l'onglet ✏️ Saisie</div>
+        <div style="font-size:11px;color:#64748b">Va dans l'onglet 🔄 Synchro pour récupérer tes résultats</div>
       </div>`;
     return;
   }
@@ -757,7 +770,7 @@ async function renderDashboard() {
     <div class="dash-hero">
       <div class="dash-hero-title">TABLEAU DE BORD · LONACI TRACKER PRO</div>
       <div class="dash-date">${dowToday} ${fmtKey(todayStr)}</div>
-      <div class="dash-day">${hasTodayData ? '✅ Données d\'aujourd\'hui enregistrées' : '⏳ Données d\'aujourd\'hui manquantes'}</div>
+      <div class="dash-day">${hasTodayData ? '✅ Données d\'aujourd\'hui enregistrées' : '⏳ Données d\'aujourd\'hui manquantes — Synchronise'}</div>
     </div>
 
     <div class="dash-summary">
@@ -837,22 +850,103 @@ async function renderDashboard() {
 }
 
 // ══════════════════════════════════════
-// SAISIE
+// SYNCHRO — lonaci-tracker-2 (Render/Supabase)
 // ══════════════════════════════════════
-function initSaisie(){const inp=document.getElementById('saisie-date');inp.value=todayKey();inp.addEventListener('change',buildSaisieTirages);buildSaisieTirages();}
-function buildSaisieTirages(){const date=document.getElementById('saisie-date').value||todayKey();const dow=getDow(date),prog=PROG[dow]||PROG[0];document.getElementById('saisie-dow').textContent=JOURS[dow];const container=document.getElementById('saisie-tirages');container.innerHTML='';prog.forEach((t,ti)=>{const card=document.createElement('div');card.className='tcard';card.id=`tcard-${ti}`;card.innerHTML=`<div class="tcard-header"><span class="tcard-name">${t.n} <span style="color:#64748b;font-weight:400">${t.h}</span></span><span class="tcard-status" id="status-${ti}">EN ATTENTE</span></div><div class="inputs-grid"><div class="input-section"><label style="color:#4ade80">🏆 GAGNANTS</label><div style="display:flex;gap:3px;flex-wrap:wrap">${[0,1,2,3,4].map(ni=>`<input type="number" min="1" max="90" class="num-inp" id="g-${ti}-${ni}" oninput="onInput(${ti})" placeholder="${ni+1}">`).join('')}</div><div class="balls-row" id="gballs-${ti}"></div></div><div class="input-section"><label style="color:#a78bfa">🤖 MACHINE</label><div style="display:flex;gap:3px;flex-wrap:wrap">${[0,1,2,3,4].map(ni=>`<input type="number" min="1" max="90" class="num-inp" id="m-${ti}-${ni}" oninput="onInput(${ti})" placeholder="${ni+1}">`).join('')}</div><div class="balls-row" id="mballs-${ti}"></div></div></div><div class="communs-note" id="com-${ti}" style="display:none"></div>`;container.appendChild(card);});}
-function getInputNums(prefix,ti){return[0,1,2,3,4].map(ni=>{const v=parseInt(document.getElementById(`${prefix}-${ti}-${ni}`)?.value||'');return isNaN(v)||v<1||v>90?null:v;}).filter(v=>v!==null);}
-function onInput(ti){const gN=getInputNums('g',ti),mN=getInputNums('m',ti);const full=gN.length===5&&mN.length===5,half=gN.length===5;document.getElementById(`tcard-${ti}`).className='tcard'+(full?' full':half?' half':'');const st=document.getElementById(`status-${ti}`);st.textContent=full?'✓ COMPLET':half?'½ OK':'EN ATTENTE';st.className='tcard-status'+(full?' ok':half?' half-ok':'');[0,1,2,3,4].forEach(ni=>{['g','m'].forEach(p=>{const inp=document.getElementById(`${p}-${ti}-${ni}`);if(!inp)return;const v=parseInt(inp.value),ok=!isNaN(v)&&v>=1&&v<=90;const c=ok?ballColor(v,p==='m'):(inp.value?'#f87171':'#334155');inp.style.borderColor=c;inp.style.color=c;});});document.getElementById(`gballs-${ti}`).innerHTML=gN.map(n=>ballHTML(n,36,false)).join('');document.getElementById(`mballs-${ti}`).innerHTML=mN.map(n=>ballHTML(n,36,true)).join('');const com=gN.filter(n=>mN.includes(n));const cd=document.getElementById(`com-${ti}`);if(com.length&&gN.length===5&&mN.length===5){cd.style.display='block';cd.textContent='⚡ Communs G+M: '+com.join(', ');}else cd.style.display='none';}
-function clearSaisie(){buildSaisieTirages();}
-async function saveSaisie(){const date=document.getElementById('saisie-date').value;if(!date){showMsg('saisie-msg','❌ Sélectionnez une date',false);return;}const dow=getDow(date),prog=PROG[dow]||PROG[0];const tirages=prog.map((t,ti)=>({name:t.n,heure:t.h,gagnants:getInputNums('g',ti),machine:getInputNums('m',ti)})).filter(t=>t.gagnants.length===5);if(!tirages.length){showMsg('saisie-msg','❌ Entrez au moins 1 tirage complet (5 gagnants)',false);return;}const data=await sLoad();data[date]={tirages,at:new Date().toISOString()};await sSave(data);_cache=null;updateBadge();showMsg('saisie-msg',`✅ ${fmtKey(date)} enregistré (${tirages.length} tirage(s)) — Pense à exporter régulièrement 💾`,true);buildSaisieTirages();}
-function showMsg(id,txt,ok){const el=document.getElementById(id);if(!el)return;el.textContent=txt;el.className='msg '+(ok?'ok':'err');setTimeout(()=>el.className='msg',4000);}
+const SYNC_API_BASE = 'https://lonaci-tracker-2.onrender.com';
+const SYNC_LAST_KEY = 'lonaci_last_sync';
+
+function normalizeDateISO(raw){
+  if(!raw) return null;
+  // Supabase peut renvoyer "2026-07-20" ou "2026-07-20T00:00:00.000Z"
+  return String(raw).slice(0,10);
+}
+
+function parseNumList(str){
+  if(!str) return [];
+  return String(str).split(',').map(s=>parseInt(s.trim(),10)).filter(n=>!isNaN(n)&&n>=1&&n<=90);
+}
+
+async function syncFromAPI(){
+  const btn = document.getElementById('sync-btn');
+  const statusEl = document.getElementById('sync-status');
+  const msgEl = document.getElementById('sync-msg');
+  btn.disabled = true;
+  btn.textContent = '⏳ Synchronisation...';
+  statusEl.innerHTML = '⏳ Connexion à lonaci-tracker-2...';
+  msgEl.className = 'msg';
+
+  try {
+    const res = await fetch(`${SYNC_API_BASE}/api/historique?limit=2000`);
+    if(!res.ok) throw new Error(`Le serveur a répondu avec le statut ${res.status}`);
+    const json = await res.json();
+    if(!json.success) throw new Error(json.error || 'Réponse invalide du serveur');
+    const rows = json.historique || [];
+    if(!rows.length){
+      statusEl.innerHTML = '⚠️ Le serveur a répondu mais aucun tirage n\'est encore enregistré côté backend.';
+      showMsg('sync-msg', '⚠️ Aucune donnée disponible sur le serveur pour le moment.', false);
+      return;
+    }
+
+    const data = {};
+    rows.forEach(r=>{
+      const dateKey = normalizeDateISO(r.date_tirage);
+      if(!dateKey) return;
+      const gagnants = parseNumList(r.numeros_gagnants);
+      const machine = parseNumList(r.numeros_machine);
+      if(!data[dateKey]) data[dateKey] = { tirages: [], at: new Date().toISOString(), source: 'api' };
+      data[dateKey].tirages.push({
+        name: r.tirage || '—',
+        heure: NAME_TO_HEURE[r.tirage] || '',
+        gagnants,
+        machine
+      });
+    });
+
+    const nbJours = Object.keys(data).length;
+    await sSave(data);
+    _cache = null;
+
+    const now = new Date().toISOString();
+    localStorage.setItem(SYNC_LAST_KEY, now);
+
+    updateBadge();
+    renderDashboard();
+    renderHistorique();
+
+    statusEl.innerHTML = `✅ Synchronisé avec succès depuis <b>lonaci-tracker-2</b>.`;
+    showMsg('sync-msg', `✅ ${nbJours} jour(s) · ${rows.length} tirage(s) synchronisés.`, true);
+    updateSyncLastLabel();
+
+  } catch(err) {
+    statusEl.innerHTML = '❌ Échec de la synchronisation.';
+    showMsg('sync-msg', '❌ Erreur : ' + err.message + ' (vérifie ta connexion ou que le service Render est bien démarré — le plan gratuit peut prendre ~30s à se réveiller).', false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📡 Synchroniser maintenant';
+  }
+}
+
+function updateSyncLastLabel(){
+  const el = document.getElementById('sync-last');
+  if(!el) return;
+  const last = localStorage.getItem(SYNC_LAST_KEY);
+  if(!last){ el.textContent = ''; return; }
+  const d = new Date(last);
+  el.textContent = `Dernière synchro : ${d.toLocaleDateString('fr-FR')} à ${d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`;
+}
+
+function initSynchro(){
+  updateSyncLastLabel();
+}
+
+function showMsg(id,txt,ok){const el=document.getElementById(id);if(!el)return;el.textContent=txt;el.className='msg '+(ok?'ok':'err');setTimeout(()=>el.className='msg',5000);}
 
 // ══════════════════════════════════════
 // ANALYSE
 // ══════════════════════════════════════
 let currentView='global',analyseData=null;
 function initAnalyse(){document.getElementById('analyse-date').value=todayKey();const d=new Date();document.getElementById('hist-month').value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;}
-async function analyseLatest(){const data=await sLoad(),keys=Object.keys(data).sort().reverse();if(!keys.length){showAnalyseErr('Aucune donnée. Commencez par saisir des résultats.');return;}document.getElementById('analyse-date').value=keys[0];runAnalyse();}
+async function analyseLatest(){const data=await sLoad(),keys=Object.keys(data).sort().reverse();if(!keys.length){showAnalyseErr('Aucune donnée. Synchronise d\'abord depuis l\'onglet 🔄 Synchro.');return;}document.getElementById('analyse-date').value=keys[0];runAnalyse();}
 function showAnalyseErr(msg){const e=document.getElementById('analyse-err');e.textContent=msg;e.className='msg err';document.getElementById('analyse-output').innerHTML='';}
 function computeStats(nums){if(!nums.length)return null;const pC=nums.filter(isEven).length,iC=nums.length-pC;const tF={};for(let i=0;i<10;i++)tF[i]=0;nums.forEach(n=>tF[n%10]++);const lF={};for(let l=1;l<=9;l++)lF[l]=0;nums.forEach(n=>{const l=getLigne(n);if(l)lF[l]++;});const nF={};nums.forEach(n=>{nF[n]=(nF[n]||0)+1;});return{pC,iC,tF,lF,abT:[0,1,2,3,4,5,6,7,8,9].filter(t=>tF[t]===0),hotT:[0,1,2,3,4,5,6,7,8,9].filter(t=>tF[t]>=3),coldL:Object.entries(lF).filter(([,f])=>f===0).map(([l])=>+l),hotL:Object.entries(lF).filter(([,f])=>+f>=Math.ceil(nums.length/6)).map(([l])=>+l),dups:Object.entries(nF).filter(([,f])=>+f>=2).map(([n])=>+n),};}
 async function runAnalyse(){const date=document.getElementById('analyse-date').value;const data=await sLoad(),day=data[date];if(!day){showAnalyseErr(`Aucune donnée pour le ${fmtKey(date)}.`);return;}document.getElementById('analyse-err').className='msg';const tirages=day.tirages;const allG=tirages.flatMap(t=>t.gagnants||[]);const allM=tirages.flatMap(t=>t.machine||[]);const com=allG.filter(n=>allM.includes(n));analyseData={date,tirages,hasMachine:allM.length>0,allG,allM,com,sG:computeStats(allG),sM:allM.length>0?computeStats(allM):null,sAll:computeStats([...allG,...allM]),next:nextKey(date),nextJ:JOURS[getDow(nextKey(date))]};currentView='global';renderAnalyse();}
@@ -862,9 +956,9 @@ function renderAnalyse(){if(!analyseData)return;const r=analyseData;const s=curr
 // ══════════════════════════════════════
 // HISTORIQUE
 // ══════════════════════════════════════
-async function renderHistorique(){const month=document.getElementById('hist-month').value;const data=await sLoad();let keys=Object.keys(data).sort().reverse();if(month)keys=keys.filter(k=>k.startsWith(month));const list=document.getElementById('hist-list');if(!keys.length){list.innerHTML=`<div class="empty-state"><div class="empty-icon">📅</div><div style="font-size:13px">Aucune donnée.<br>Allez dans <span style="color:#f5c842">Saisie</span>.</div></div>`;return;}list.innerHTML=keys.map(k=>{const e=data[k];const allG=e.tirages.flatMap(t=>t.gagnants||[]),allM=e.tirages.flatMap(t=>t.machine||[]);const com=allG.filter(n=>allM.includes(n));const tiragesHTML=e.tirages.map(t=>{const g=t.gagnants||[],m=t.machine||[];return `<div class="hist-tirage"><span class="hist-name">${t.name}<br><span style="color:#64748b">${t.heure}</span></span><div><div class="hist-section-lbl" style="color:#4ade80">GAGNANTS</div><div class="balls-row">${g.map(n=>ballHTML(n,36,false)).join('')}</div></div><div><div class="hist-section-lbl" style="color:#a78bfa">MACHINE</div><div class="balls-row">${m.length?m.map(n=>ballHTML(n,36,true)).join(''):'<span style="color:#374151;font-size:9px">—</span>'}</div></div></div>`;}).join('');return `<div class="hist-item"><div class="hist-header"><span class="hist-date">📅 ${JOURS[getDow(k)]} ${fmtKey(k)}</span><div style="display:flex;gap:8px;align-items:center"><span class="hist-meta">${e.tirages.length}T · G:${allG.filter(isEven).length}P/${allG.filter(n=>!isEven(n)).length}I${allM.length?` · M:${allM.filter(isEven).length}P/${allM.filter(n=>!isEven(n)).length}I`:''}${com.length?` <span style="color:#f5c842">⚡${com.length}</span>`:''}</span><button onclick="delDay('${k}')" style="background:none;border:none;color:#64748b;font-size:13px;cursor:pointer">🗑</button></div></div><div class="hist-body">${tiragesHTML}</div></div>`;}).join('');}
-async function delDay(k){if(!confirm(`Supprimer ${fmtKey(k)} ?`))return;await sDel(k);_cache=null;updateBadge();renderHistorique();}
-async function clearAll(){if(!confirm('Effacer TOUTES les données ? Irréversible.'))return;await sSave({});_cache=null;try{localStorage.removeItem(SK);}catch{}updateBadge();renderHistorique();}
+async function renderHistorique(){const month=document.getElementById('hist-month').value;const data=await sLoad();let keys=Object.keys(data).sort().reverse();if(month)keys=keys.filter(k=>k.startsWith(month));const list=document.getElementById('hist-list');if(!keys.length){list.innerHTML=`<div class="empty-state"><div class="empty-icon">📅</div><div style="font-size:13px">Aucune donnée.<br>Va dans <span style="color:#f5c842">🔄 Synchro</span>.</div></div>`;return;}list.innerHTML=keys.map(k=>{const e=data[k];const allG=e.tirages.flatMap(t=>t.gagnants||[]),allM=e.tirages.flatMap(t=>t.machine||[]);const com=allG.filter(n=>allM.includes(n));const tiragesHTML=e.tirages.map(t=>{const g=t.gagnants||[],m=t.machine||[];return `<div class="hist-tirage"><span class="hist-name">${t.name}<br><span style="color:#64748b">${t.heure}</span></span><div><div class="hist-section-lbl" style="color:#4ade80">GAGNANTS</div><div class="balls-row">${g.map(n=>ballHTML(n,36,false)).join('')}</div></div><div><div class="hist-section-lbl" style="color:#a78bfa">MACHINE</div><div class="balls-row">${m.length?m.map(n=>ballHTML(n,36,true)).join(''):'<span style="color:#374151;font-size:9px">—</span>'}</div></div></div>`;}).join('');return `<div class="hist-item"><div class="hist-header"><span class="hist-date">📅 ${JOURS[getDow(k)]} ${fmtKey(k)}</span><div style="display:flex;gap:8px;align-items:center"><span class="hist-meta">${e.tirages.length}T · G:${allG.filter(isEven).length}P/${allG.filter(n=>!isEven(n)).length}I${allM.length?` · M:${allM.filter(isEven).length}P/${allM.filter(n=>!isEven(n)).length}I`:''}${com.length?` <span style="color:#f5c842">⚡${com.length}</span>`:''}</span><button onclick="delDay('${k}')" style="background:none;border:none;color:#64748b;font-size:13px;cursor:pointer">🗑</button></div></div><div class="hist-body">${tiragesHTML}</div></div>`;}).join('');}
+async function delDay(k){if(!confirm(`Supprimer ${fmtKey(k)} ? (Réapparaîtra à la prochaine synchro si toujours dans le backend)`))return;await sDel(k);_cache=null;updateBadge();renderHistorique();}
+async function clearAll(){if(!confirm('Effacer TOUTES les données locales ? Irréversible (mais tu peux resynchroniser après).'))return;await sSave({});_cache=null;try{localStorage.removeItem(SK);}catch{}updateBadge();renderHistorique();}
 
 // ══════════════════════════════════════
 // PWA INSTALLATION
@@ -902,7 +996,7 @@ if('caches' in window){caches.keys().then(names=>names.forEach(name=>caches.open
 // ══════════════════════════════════════
 function showMatTab(id,btn){document.querySelectorAll('.mat-section').forEach(s=>s.classList.remove('active'));document.querySelectorAll('.mat-tab').forEach(b=>b.classList.remove('active'));document.getElementById('mat-'+id).classList.add('active');btn.classList.add('active');}
 async function extractAllNums(){const data=await sLoad();const keys=Object.keys(data).sort();if(!keys.length)return null;const numTirages={};for(let n=1;n<=90;n++)numTirages[n]=[];let tirageIndex=0;const allTirages=[];keys.forEach(date=>{const day=data[date];if(!day||!Array.isArray(day.tirages))return;day.tirages.forEach(t=>{if(!t)return;const nums=[...(t.gagnants||[]),...(t.machine||[])];allTirages.push({date,name:t.name||''  ,nums});nums.forEach(n=>{if(n>=1&&n<=90)numTirages[n].push(tirageIndex);});tirageIndex++;});});return{numTirages,allTirages,total:tirageIndex};}
-async function runMatrices(){try{const result=await extractAllNums();if(!result){const e=document.getElementById('matrices-err');e.textContent='Aucune donnée. Saisis d\'abord des tirages.';e.className='msg err';return;}document.getElementById('matrices-err').className='msg';renderMatEcart(result);renderMatCombinaisons(result);renderMatCycles(result);}catch(err){const e=document.getElementById('matrices-err');e.textContent='❌ Erreur: '+err.message;e.className='msg err';}}
+async function runMatrices(){try{const result=await extractAllNums();if(!result){const e=document.getElementById('matrices-err');e.textContent='Aucune donnée. Synchronise d\'abord depuis l\'onglet 🔄 Synchro.';e.className='msg err';return;}document.getElementById('matrices-err').className='msg';renderMatEcart(result);renderMatCombinaisons(result);renderMatCycles(result);}catch(err){const e=document.getElementById('matrices-err');e.textContent='❌ Erreur: '+err.message;e.className='msg err';}}
 async function runMatricesAll(){await runMatrices();}
 function renderMatEcart(result){const{numTirages,total}=result;const out=document.getElementById('mat-ecart-output');const ecarts=[];for(let n=1;n<=90;n++){const sorties=numTirages[n];const nbSorties=sorties.length;const dernierIdx=nbSorties>0?sorties[sorties.length-1]:-1;const ecartActuel=dernierIdx>=0?(total-1-dernierIdx):total;const ecartMax=nbSorties>1?Math.max(...sorties.slice(1).map((idx,i)=>idx-sorties[i])):ecartActuel;const freq=nbSorties>0?(total/nbSorties).toFixed(1):'∞';const ratio=ecartMax>0?ecartActuel/ecartMax:0;let couleur,zone;if(ratio>=0.9){couleur='#f87171';zone='🔴 RETOUR!';}else if(ratio>=0.7){couleur='#fb923c';zone='🟠 ÉLEVÉ';}else if(ratio>=0.4){couleur='#f5c842';zone='🟡 MOYEN';}else{couleur='#4ade80';zone='🟢 OK';}ecarts.push({n,ecartActuel,ecartMax,nbSorties,freq,couleur,zone,ratio});}ecarts.sort((a,b)=>b.ratio-a.ratio);out.innerHTML=`<div style="font-family:monospace;font-size:10px;color:#64748b;margin-bottom:8px">📊 ${total} tirage(s) analysé(s) · Triés par zone de retour</div><div class="ecart-grid">${ecarts.map(e=>`<div class="ecart-cell" style="border-color:${e.couleur}33"><div class="ecart-num" style="color:${e.couleur}">${e.n}</div><div class="ecart-val" style="color:#94a3b8">Écart: <b style="color:${e.couleur}">${e.ecartActuel}</b></div><div class="ecart-val" style="color:#64748b">Max: ${e.ecartMax}</div><div class="ecart-val" style="color:#64748b">Sorties: ${e.nbSorties}</div><div class="ecart-bar" style="background:${e.couleur}33"><div style="width:${Math.min(e.ratio*100,100)}%;height:100%;background:${e.couleur};border-radius:2px"></div></div><div class="ecart-zone" style="color:${e.couleur}">${e.zone}</div></div>`).join('')}</div>`;}
 function renderMatCombinaisons(result){const{allTirages}=result;const out=document.getElementById('mat-comb-output');if(allTirages.length<5){out.innerHTML='<div class="mat-empty">Pas assez de données (minimum 5 tirages).</div>';return;}const pairs={};allTirages.forEach(t=>{const nums=[...new Set(t.nums)].filter(n=>n>=1&&n<=90).sort((a,b)=>a-b);for(let i=0;i<nums.length;i++){for(let j=i+1;j<nums.length;j++){const key=`${nums[i]}-${nums[j]}`;pairs[key]=(pairs[key]||0)+1;}}});const sorted=Object.entries(pairs).sort((a,b)=>b[1]-a[1]).slice(0,30);const maxCount=sorted[0]?.[1]||1;out.innerHTML=`<div style="font-family:monospace;font-size:10px;color:#64748b;margin-bottom:8px">🔗 Top 30 paires chaudes sur ${allTirages.length} tirages</div><div class="comb-grid">${sorted.map(([key,count],i)=>{const[a,b]=key.split('-').map(Number);const ratio=count/maxCount;const col=ratio>=0.7?'#f87171':ratio>=0.5?'#fb923c':ratio>=0.3?'#f5c842':'#4ade80';const label=ratio>=0.7?'🔥 Très chaud':ratio>=0.5?'♨️ Chaud':ratio>=0.3?'🌡️ Tiède':'❄️ Froid';return `<div class="comb-cell" style="border-color:${col}33"><div class="comb-pair">${ballHTML(a,26,false)}<span style="color:#64748b;font-size:12px">+</span>${ballHTML(b,26,false)}<span style="font-family:monospace;font-size:9px;color:${col};margin-left:auto">#${i+1}</span></div><div class="comb-count">${count}× ensemble · ${label}</div><div class="comb-bar"><div class="comb-fill" style="width:${ratio*100}%;background:${col}"></div></div></div>`;}).join('')}</div>`;}
@@ -917,7 +1011,7 @@ async function runGroupesAll(){await _calcGroupes();}
 async function _calcGroupes(){
   try{
     const data=await sLoad();const keys=Object.keys(data).sort();
-    if(!keys.length){const e=document.getElementById('groupes-err');e.textContent='Aucune donnée. Saisis d\'abord des tirages.';e.className='msg err';return;}
+    if(!keys.length){const e=document.getElementById('groupes-err');e.textContent='Aucune donnée. Synchronise d\'abord depuis l\'onglet 🔄 Synchro.';e.className='msg err';return;}
     document.getElementById('groupes-err').className='msg';
     const grpCount=DIZAINES.map(()=>({total:0,nums:{}}));let totalNums=0;
     keys.forEach(date=>{const day=data[date];if(!day||!Array.isArray(day.tirages))return;day.tirages.forEach(t=>{const nums=[...(t.gagnants||[]),...(t.machine||[])];nums.forEach(n=>{if(n<1||n>90)return;totalNums++;const gi=Math.floor((n-1)/10);grpCount[gi].total++;grpCount[gi].nums[n]=(grpCount[gi].nums[n]||0)+1;});});});
@@ -991,7 +1085,7 @@ async function lancerPrediction(){
     const data = await sLoad();
     const keys = Object.keys(data).sort().reverse();
     if(!keys.length){
-      showIAResult(`<div class="ia-error">❌ Aucune donnée dans la base. Saisis d'abord des tirages.</div>`);
+      showIAResult(`<div class="ia-error">❌ Aucune donnée dans la base. Synchronise d'abord depuis l'onglet 🔄 Synchro.</div>`);
       return;
     }
 
@@ -1108,16 +1202,19 @@ function showIAResult(html){
   card.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
+// ══════════════════════════════════════
 // INIT
 // ══════════════════════════════════════
 function initApp() {
-  initSaisie();
+  initSynchro();
   initAnalyse();
   updateBadge();
   initLexique();
   renderDashboard();
   setTimeout(()=>runMatrices(),200);
   setTimeout(()=>runGroupes(),300);
+  // Synchro automatique au lancement de l'app
+  setTimeout(()=>syncFromAPI(),400);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
