@@ -1,11 +1,15 @@
 const parseJourEnDate = require('./parseJourEnDate');
 const express = require('express');
+const cors = require('cors');
 const puppeteer = require('puppeteer-core');
 const chromium = require('@sparticuz/chromium');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// ---- CORS : autorise les appels depuis ta PWA (GitHub Pages) ----
+app.use(cors());
 
 // ---- Supabase ----
 const supabase = createClient(
@@ -81,15 +85,12 @@ function construireDateISO(jourMoisStr, startDateStr, endDateStr) {
   const [, , anneeDebut] = startDateStr.split('/');
   const [, moisFin, anneeFin] = endDateStr.split('/');
 
-  // Si le mois du jour correspond au mois de fin de semaine, on prend l'année de fin,
-  // sinon l'année de début (cas des semaines à cheval sur deux mois/années).
   const annee = mm === moisFin ? anneeFin : anneeDebut;
 
   return `${annee}-${mm}-${jj}`;
 }
 
 // ---- Parse la réponse JSON de l'API en une liste plate de tirages ----
-// Structure source: drawsResultsWeekly -> drawResultsDaily -> standardDraws
 function parseApiResponse(apiData) {
   const resultats = [];
 
@@ -267,7 +268,6 @@ app.get('/api/resultats', async (req, res) => {
   const monthYear = req.query.monthYear || getMonthYearFR();
   const drawType = req.query.drawType || 'Tous les tirages';
 
-  // --- Tentative 1 : API directe ---
   try {
     const apiData = await fetchResultatsAPI(monthYear, drawType);
     const resultats = parseApiResponse(apiData);
@@ -288,7 +288,6 @@ app.get('/api/resultats', async (req, res) => {
     console.error('fetchResultatsAPI a échoué, fallback Puppeteer:', apiErr.message);
   }
 
-  // --- Tentative 2 : Puppeteer (fallback) ---
   let page = null;
   try {
     const browser = await getBrowser();
