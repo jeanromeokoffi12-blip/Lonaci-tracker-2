@@ -854,6 +854,7 @@ async function renderDashboard() {
 // ══════════════════════════════════════
 const SYNC_API_BASE = 'https://lonaci-tracker-2.onrender.com';
 const SYNC_LAST_KEY = 'lonaci_last_sync';
+
 function parseNumList(raw){
   if(!raw) return [];
   let val = raw;
@@ -867,13 +868,13 @@ function parseNumList(raw){
     return val.map(s=>parseInt(s,10)).filter(n=>!isNaN(n)&&n>=1&&n<=90);
   }
   return String(val).split(',').map(s=>parseInt(s.trim(),10)).filter(n=>!isNaN(n)&&n>=1&&n<=90);
+}
 
 function normalizeDateISO(raw){
   if(!raw) return null;
   // Supabase peut renvoyer "2026-07-20" ou "2026-07-20T00:00:00.000Z"
   return String(raw).slice(0,10);
 }
-
 
 async function syncFromAPI(){
   const btn = document.getElementById('sync-btn');
@@ -1043,8 +1044,6 @@ function filterLexCat(cat,btn){lexCurrentCat=cat;document.querySelectorAll('.lex
 function filterLexique(val){lexCurrentSearch=val.toLowerCase().trim();renderLexique();}
 function renderLexique(){let items=LEXIQUE;if(lexCurrentCat!=='tous')items=items.filter(e=>e.cat===lexCurrentCat);if(lexCurrentSearch)items=items.filter(e=>e.terme.toLowerCase().includes(lexCurrentSearch)||e.def.toLowerCase().includes(lexCurrentSearch));const list=document.getElementById('lex-list');if(!items.length){list.innerHTML='<div class="lex-empty">🔍 Aucun terme trouvé.</div>';return;}const catLabel={alertes:'🚨 Alerte',matrices:'🔢 Matrice',strategie:'🎯 Stratégie'};list.innerHTML=items.map((e,i)=>`<div class="lex-card"><div class="lex-card-header" onclick="toggleLex(${i})"><span class="lex-card-term">${e.terme}</span><div style="display:flex;gap:6px;align-items:center"><span class="lex-card-cat">${catLabel[e.cat]||e.cat}</span><span class="lex-arrow" id="lex-arrow-${i}">▶</span></div></div><div class="lex-card-body" id="lex-body-${i}"><p class="lex-def">${e.def}</p>${e.strategie?`<div class="lex-strategy"><div class="lex-strategy-title">${e.strategie.titre}</div><div class="lex-strategy-body">${e.strategie.corps.replace(/\n/g,'<br>')}</div></div>`:''} ${e.exemple?`<div class="lex-example">✅ ${e.exemple}</div>`:''} ${e.warn?`<div class="lex-warn">${e.warn}</div>`:''}</div></div>`).join('');}
 function toggleLex(i){const body=document.getElementById(`lex-body-${i}`);const arrow=document.getElementById(`lex-arrow-${i}`);const isOpen=body.classList.contains('open');document.querySelectorAll('.lex-card-body').forEach(b=>b.classList.remove('open'));document.querySelectorAll('.lex-arrow').forEach(a=>{a.classList.remove('open');a.textContent='▶';});if(!isOpen){body.classList.add('open');arrow.classList.add('open');arrow.textContent='▼';}}
-
-// ══════════════════════════════════════
 
 // ══════════════════════════════════════
 // PRÉDICTION IA
