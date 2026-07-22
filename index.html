@@ -854,6 +854,19 @@ async function renderDashboard() {
 // ══════════════════════════════════════
 const SYNC_API_BASE = 'https://lonaci-tracker-2.onrender.com';
 const SYNC_LAST_KEY = 'lonaci_last_sync';
+function parseNumList(raw){
+  if(!raw) return [];
+  let val = raw;
+  if(typeof val === 'string'){
+    const trimmed = val.trim();
+    if(trimmed.startsWith('[')){
+      try{ val = JSON.parse(trimmed); }catch(e){ /* on retombe sur le format texte */ }
+    }
+  }
+  if(Array.isArray(val)){
+    return val.map(s=>parseInt(s,10)).filter(n=>!isNaN(n)&&n>=1&&n<=90);
+  }
+  return String(val).split(',').map(s=>parseInt(s.trim(),10)).filter(n=>!isNaN(n)&&n>=1&&n<=90);
 
 function normalizeDateISO(raw){
   if(!raw) return null;
@@ -861,10 +874,6 @@ function normalizeDateISO(raw){
   return String(raw).slice(0,10);
 }
 
-function parseNumList(str){
-  if(!str) return [];
-  return String(str).split(',').map(s=>parseInt(s.trim(),10)).filter(n=>!isNaN(n)&&n>=1&&n<=90);
-}
 
 async function syncFromAPI(){
   const btn = document.getElementById('sync-btn');
