@@ -616,14 +616,53 @@ document.getElementById('access-input').addEventListener('keydown', e => {
   if(e.key === 'Enter') checkAccess();
 });
 
-function deconnecter() {
-  if(confirm('Se déconnecter ? Vous devrez entrer votre code à la prochaine ouverture.')) {
+async function deconnecter() {
+  if(await customConfirm('Se déconnecter ?\nVous devrez entrer votre code à la prochaine ouverture.')) {
     localStorage.removeItem(ACCESS_KEY);
     location.reload();
   }
 }
 
 // Vérifier si déjà connecté — exécuté après DOMContentLoaded (voir bas de page)
+
+// ══════════════════════════════════════
+// CONFIRMATION MAISON (remplace confirm() natif, souvent bloqué en PWA installée)
+// ══════════════════════════════════════
+function customConfirm(message){
+  return new Promise(resolve=>{
+    const modal=document.createElement('div');
+    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px';
+    modal.innerHTML=`<div style="background:#0f172a;border:1px solid #334155;border-radius:12px;padding:20px;max-width:320px;width:100%">
+      <p style="font-size:13px;color:#f1f5f9;margin-bottom:16px;white-space:pre-line;line-height:1.5">${message}</p>
+      <div style="display:flex;gap:8px">
+        <button id="cc-yes" style="flex:1;padding:10px;border-radius:8px;border:none;background:#f5c842;color:#0a0f1a;font-weight:700">Oui</button>
+        <button id="cc-no" style="flex:1;padding:10px;border-radius:8px;border:1px solid #334155;background:transparent;color:#94a3b8">Annuler</button>
+      </div>
+    </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('#cc-yes').onclick=()=>{document.body.removeChild(modal);resolve(true);};
+    modal.querySelector('#cc-no').onclick=()=>{document.body.removeChild(modal);resolve(false);};
+  });
+}
+
+// ══════════════════════════════════════
+// BANDEAU D'ERREUR VISIBLE (diagnostic sans devtools)
+// ══════════════════════════════════════
+function showGlobalError(msg){
+  let banner=document.getElementById('global-error-banner');
+  if(!banner){
+    banner=document.createElement('div');
+    banner.id='global-error-banner';
+    banner.style.cssText='position:fixed;top:0;left:0;right:0;background:#2d0a0a;color:#f87171;font-family:monospace;font-size:10px;padding:8px 12px;z-index:9998;max-height:140px;overflow-y:auto';
+    document.body.appendChild(banner);
+  }
+  const line=document.createElement('div');
+  line.style.cssText='padding:4px 0;border-bottom:1px solid #f8717133;display:flex;justify-content:space-between;gap:8px';
+  line.innerHTML=`<span>⚠️ ${msg}</span><span style="cursor:pointer;flex-shrink:0" onclick="this.parentElement.remove()">✕</span>`;
+  banner.appendChild(line);
+}
+window.addEventListener('error', e=>showGlobalError(e.message+' (ligne '+e.lineno+')'));
+window.addEventListener('unhandledrejection', e=>showGlobalError('Rejet: '+(e.reason&&e.reason.message?e.reason.message:e.reason)));
 
 // ══════════════════════════════════════
 // DONNÉES
@@ -653,7 +692,7 @@ async function ouvrirExport(){const data=await sLoad();const nb=Object.keys(data
 function toutSelectionner(){const ta=document.getElementById('export-textarea');ta.select();ta.setSelectionRange(0,99999);try{document.execCommand('copy');showMsg('backup-msg2','✅ Données copiées ! Colle dans Notes ou WhatsApp.',true);setTimeout(()=>fermerModal('modal-export'),1500);}catch{alert('Appuie longuement sur le texte → Tout sélectionner → Copier');}}
 function fermerModal(id){document.getElementById(id).style.display='none';}
 function ouvrirImport(){document.getElementById('import-textarea').value='';document.getElementById('modal-import').style.display='block';}
-async function importerDonnees(){const txt=document.getElementById('import-textarea').value.trim();if(!txt){showMsg('import-msg','❌ Colle tes données d\'abord.',false);return;}try{const imported=JSON.parse(txt);const nb=Object.keys(imported).length;if(!nb){showMsg('import-msg','❌ Données invalides ou vides.',false);return;}if(confirm(`Importer ${nb} jour(s) ?\nFusion avec tes données actuelles.`)){const current=await sLoad();const merged={...current,...imported};await sSave(merged);_cache=null;updateBadge();renderHistorique();fermerModal('modal-import');showMsg('backup-msg','✅ '+nb+' jour(s) importé(s) avec succès !',true);}}catch{showMsg('import-msg','❌ Texte invalide. Vérifie que tu as tout copié.',false);}}
+async function importerDonnees(){const txt=document.getElementById('import-textarea').value.trim();if(!txt){showMsg('import-msg','❌ Colle tes données d\'abord.',false);return;}try{const imported=JSON.parse(txt);const nb=Object.keys(imported).length;if(!nb){showMsg('import-msg','❌ Données invalides ou vides.',false);return;}if(await customConfirm(`Importer ${nb} jour(s) ?\nFusion avec tes données actuelles.`)){const current=await sLoad();const merged={...current,...imported};await sSave(merged);_cache=null;updateBadge();renderHistorique();fermerModal('modal-import');showMsg('backup-msg','✅ '+nb+' jour(s) importé(s) avec succès !',true);}}catch{showMsg('import-msg','❌ Texte invalide. Vérifie que tu as tout copié.',false);}}
 
 // ══════════════════════════════════════
 // UTILS
@@ -967,8 +1006,8 @@ function renderAnalyse(){if(!analyseData)return;const r=analyseData;const s=curr
 // HISTORIQUE
 // ══════════════════════════════════════
 async function renderHistorique(){const month=document.getElementById('hist-month').value;const data=await sLoad();let keys=Object.keys(data).sort().reverse();if(month)keys=keys.filter(k=>k.startsWith(month));const list=document.getElementById('hist-list');if(!keys.length){list.innerHTML=`<div class="empty-state"><div class="empty-icon">📅</div><div style="font-size:13px">Aucune donnée.<br>Va dans <span style="color:#f5c842">🔄 Synchro</span>.</div></div>`;return;}list.innerHTML=keys.map(k=>{const e=data[k];const allG=e.tirages.flatMap(t=>t.gagnants||[]),allM=e.tirages.flatMap(t=>t.machine||[]);const com=allG.filter(n=>allM.includes(n));const tiragesHTML=e.tirages.map(t=>{const g=t.gagnants||[],m=t.machine||[];return `<div class="hist-tirage"><span class="hist-name">${t.name}<br><span style="color:#64748b">${t.heure}</span></span><div><div class="hist-section-lbl" style="color:#4ade80">GAGNANTS</div><div class="balls-row">${g.map(n=>ballHTML(n,44,false)).join('')}</div></div><div><div class="hist-section-lbl" style="color:#a78bfa">MACHINE</div><div class="balls-row">${m.length?m.map(n=>ballHTML(n,44,true)).join(''):'<span style="color:#374151;font-size:9px">—</span>'}</div></div></div>`;}).join('');return `<div class="hist-item"><div class="hist-header"><span class="hist-date">📅 ${JOURS[getDow(k)]} ${fmtKey(k)}</span><div style="display:flex;gap:8px;align-items:center"><span class="hist-meta">${e.tirages.length}T · G:${allG.filter(isEven).length}P/${allG.filter(n=>!isEven(n)).length}I${allM.length?` · M:${allM.filter(isEven).length}P/${allM.filter(n=>!isEven(n)).length}I`:''}${com.length?` <span style="color:#f5c842">⚡${com.length}</span>`:''}</span><button onclick="delDay('${k}')" style="background:none;border:none;color:#64748b;font-size:13px;cursor:pointer">🗑</button></div></div><div class="hist-body">${tiragesHTML}</div></div>`;}).join('');}
-async function delDay(k){if(!confirm(`Supprimer ${fmtKey(k)} ? (Réapparaîtra à la prochaine synchro si toujours dans le backend)`))return;await sDel(k);_cache=null;updateBadge();renderHistorique();}
-async function clearAll(){if(!confirm('Effacer TOUTES les données locales ? Irréversible (mais tu peux resynchroniser après).'))return;await sSave({});_cache=null;try{localStorage.removeItem(SK);}catch{}updateBadge();renderHistorique();}
+async function delDay(k){if(!(await customConfirm(`Supprimer ${fmtKey(k)} ?\n(Réapparaîtra à la prochaine synchro si toujours dans le backend)`)))return;await sDel(k);_cache=null;updateBadge();renderHistorique();}
+async function clearAll(){if(!(await customConfirm('Effacer TOUTES les données locales ?\nIrréversible (mais tu peux resynchroniser après).')))return;await sSave({});_cache=null;try{localStorage.removeItem(SK);}catch{}updateBadge();renderHistorique();}
 
 // ══════════════════════════════════════
 // PWA INSTALLATION
@@ -1210,31 +1249,4 @@ function showIAResult(html){
   card.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
-// ══════════════════════════════════════
-// INIT
-// ══════════════════════════════════════
-function initApp() {
-  initSynchro();
-  initAnalyse();
-  updateBadge();
-  initLexique();
-  renderDashboard();
-  setTimeout(()=>runMatrices(),200);
-  setTimeout(()=>runGroupes(),300);
-  // Synchro automatique au lancement de l'app
-  setTimeout(()=>syncFromAPI(),400);
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('hist-month').addEventListener('change', renderHistorique);
-  const saved = localStorage.getItem(ACCESS_KEY);
-  if(saved && ACCESS_CODES.map(c=>c.toUpperCase()).includes(saved.toUpperCase())) {
-    document.getElementById('access-screen').classList.add('hidden');
-    const el = document.getElementById('about-code-display');
-    if(el) el.textContent = saved;
-    initApp();
-  }
-});
-</script>
-</body>
-</html>
+// ═════
