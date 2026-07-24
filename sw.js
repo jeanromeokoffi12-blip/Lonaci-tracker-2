@@ -1,8 +1,7 @@
 // Service Worker - Lonaci Tracker Pro
-// Incrémente CACHE_VERSION à chaque mise à jour pour forcer le rafraîchissement
-const CACHE_VERSION = 'v1';
+// Incrémente CACHE_VERSION à chaque mise à jour pour forcer le rafraîchissement;
 const CACHE_NAME = `lonaci-tracker-${CACHE_VERSION}`;
-
+const CACHE_VERSION = 'v2';
 const ASSETS_TO_CACHE = [
   './index.html',
   './manifest.json',
