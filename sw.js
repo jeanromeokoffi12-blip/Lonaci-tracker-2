@@ -1,7 +1,8 @@
 // Service Worker - Lonaci Tracker Pro
-// Incrémente CACHE_VERSION à chaque mise à jour pour forcer le rafraîchissement;
-const CACHE_NAME = `lonaci-tracker-${CACHE_VERSION}`;
+// Incrémente CACHE_VERSION à chaque mise à jour pour forcer le rafraîchissement
 const CACHE_VERSION = 'v2';
+const CACHE_NAME = `lonaci-tracker-${CACHE_VERSION}`;
+
 const ASSETS_TO_CACHE = [
   './index.html',
   './manifest.json',
@@ -33,7 +34,6 @@ self.addEventListener('activate', (event) => {
 
 // Stratégie : network-first avec fallback cache (évite le cache figé)
 self.addEventListener('fetch', (event) => {
-  // Ne pas intercepter les appels API externes (ex: Anthropic, lotobonheur)
   if (!event.request.url.startsWith(self.location.origin)) {
     return;
   }
