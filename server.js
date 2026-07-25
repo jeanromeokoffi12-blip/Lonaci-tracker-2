@@ -90,15 +90,23 @@ function construireDateISO(jourMoisStr, startDateStr, endDateStr) {
   return `${annee}-${mm}-${jj}`;
 }
 
+// ---- Récupère le tableau des semaines quel que soit l'orthographe exacte
+//      de la clé renvoyée par l'API (drawResultsWeekly / drawsResultsWeekly) ----
+function extraireSemaines(apiData) {
+  if (!apiData) return [];
+  if (Array.isArray(apiData.drawResultsWeekly)) return apiData.drawResultsWeekly;
+  if (Array.isArray(apiData.drawsResultsWeekly)) return apiData.drawsResultsWeekly;
+  return [];
+}
+
 // ---- Parse la réponse JSON de l'API en une liste plate de tirages ----
 function parseApiResponse(apiData) {
   const resultats = [];
 
-  if (!apiData || !Array.isArray(apiData.drawsResultsWeekly)) {
-    return resultats;
-  }
+  const semaines = extraireSemaines(apiData);
+  if (semaines.length === 0) return resultats;
 
-  for (const semaine of apiData.drawsResultsWeekly) {
+  for (const semaine of semaines) {
     const { startDate, endDate, drawResultsDaily } = semaine;
     if (!Array.isArray(drawResultsDaily)) continue;
 
@@ -107,9 +115,15 @@ function parseApiResponse(apiData) {
       if (!dateMatch) continue;
 
       const dateISO = construireDateISO(dateMatch[1], startDate, endDate);
-      const tirages = jourData.drawResults?.standardDraws || [];
+
+      // On combine standardDraws ET nightDraws (si présent) pour ne rien perdre
+      const tirages = [
+        ...(jourData.drawResults?.standardDraws || []),
+        ...(jourData.drawResults?.nightDraws || []),
+      ];
 
       for (const t of tirages) {
+        // Ignore les emplacements vides/placeholder renvoyés par le filtre drawType
         if (!t.drawName || t.drawName === '-') continue;
         if (!t.winningNumbers || t.winningNumbers.includes('.')) continue;
 
