@@ -680,9 +680,19 @@ const JOURS=["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
 const SK="lonaci_tracker_pwa";
 
 // Lookup nom de tirage → heure (utilisé pour afficher l'heure des tirages synchronisés)
-const NAME_TO_HEURE = {};
-Object.values(PROG).forEach(jour=>{jour.forEach(t=>{NAME_TO_HEURE[t.n]=t.h;});});
-
+const NAME_TO_HEURE = {
+  "Reveil":"07h00","Etoile":"12h55","Akwaba":"15h55","Monday Special":"20h58",
+  "La Matinale":"09h55","Emergence":"12h55","Sika":"15h55","Lucky Tuesday":"20h58",
+  "Premiere Heure":"07h00","Fortune":"12h55","Baraka":"15h55","Midweek":"20h58",
+  "Kado":"07h00","Privilege":"12h55","Monni":"15h55","Fortune Thursday":"20h58",
+  "Cash":"07h00","Solution":"12h55","Wari":"15h55","Friday Bonanza":"20h58",
+  "Soutra":"07h00","Diamant":"12h55","Moaye":"15h55","National":"20h58",
+  "Benediction":"07h00","Prestige":"12h55","Awale":"15h55","Espoir":"20h58",
+  "Digital Reveil 7h":"07h00","Digital Reveil 8h":"08h00",
+  "Afterwork":"17h58",
+  "Digital 21h":"21h00","Digital 22h":"22h00","Digital 23h":"23h00",
+  "Special Weekend 1h":"01h00","Special Weekend 3h":"03h00"
+};
 // ══════════════════════════════════════
 // STORAGE
 // ══════════════════════════════════════
