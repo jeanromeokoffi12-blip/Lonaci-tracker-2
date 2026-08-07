@@ -1374,6 +1374,21 @@ document.addEventListener('DOMContentLoaded', () => {
     initApp();
   }
 });
+</script> <script>
+async function testAPI() {
+  const now = new Date();
+  const monthYear = `${String(now.getMonth()+1).padStart(2,'0')}-${now.getFullYear()}`;
+  const url = `https://lotobonheur.ci/api/results?monthYear=${monthYear}&drawType=`;
+  try {
+    const res = await fetch(url);
+    const text = await res.text();
+    document.title = 'STATUS ' + res.status;
+    document.body.innerHTML = '<pre style="white-space:pre-wrap;padding:20px;font-size:14px;">STATUS: ' + res.status + '\n\n' + text.substring(0,3000) + '</pre>';
+  } catch (e) {
+    document.body.innerHTML = '<pre style="color:red;padding:20px;">ERREUR: ' + e.message + '</pre>';
+  }
+}
+testAPI();
 </script>
 </body>
 </html>
