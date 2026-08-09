@@ -78,54 +78,88 @@ function getMonthYearFR(date = new Date()) {
   return `${mois[date.getMonth()]} ${date.getFullYear()}`;
 }
 
-// ---- Convertit "DD/MM" + contexte de semaine (startDate/endDate "DD/MM/YYYY")
-//      en date ISO "YYYY-MM-DD", en gérant les semaines à cheval sur deux années ----
-function construireDateISO(jourMoisStr, startDateStr, endDateStr) {
-  const [jj, mm] = jourMoisStr.split('/');
-  const [, , anneeDebut] = startDateStr.split('/');
-  const [, moisFin, anneeFin] = endDateStr.split('/');
+// ---- Convertit un nom de mois FR en numéro (01-12) ----
+const MOIS_FR_INDEX = {
+  janvier: '01', février: '02', fevrier: '02', mars: '03', avril: '04',
+  mai: '05', juin: '06', juillet: '07', août: '08', aout: '08',
+  septembre: '09', octobre: '10', novembre: '11', décembre: '12', decembre: '12',
+};
 
-  const annee = mm === moisFin ? anneeFin : anneeDebut;
+// ---- Déduit l'année ISO correcte pour un jour "jj/mm" donné un monthYear "août 2026" ----
+// Gère le cas où la semaine affichée déborde sur le mois précédent/suivant
+// (ex: on demande "janvier 2026" mais une ligne affiche "31/12")
+function resoudreDateISO(jourMoisStr, monthYearFR) {
+  const [jj, mm] = jourMoisStr.split('/');
+  const match = (monthYearFR || '').toLowerCase().match(/([a-zéû]+)\s+(\d{4})/);
+
+  if (!match) {
+    return `${new Date().getFullYear()}-${mm}-${jj}`;
+  }
+
+  const [, moisNomDemande, anneeDemandee] = match;
+  const mmDemande = MOIS_FR_INDEX[moisNomDemande] || null;
+
+  let annee = parseInt(anneeDemandee, 10);
+
+  if (mmDemande) {
+    const moisDemandeNum = parseInt(mmDemande, 10);
+    const moisLigneNum = parseInt(mm, 10);
+
+    // Si le mois de la ligne ne correspond pas au mois demandé,
+    // c'est un débordement de semaine sur le mois voisin
+    if (moisLigneNum !== moisDemandeNum) {
+      if (moisDemandeNum === 1 && moisLigneNum === 12) {
+        annee -= 1; // ex: on est en janvier 2026, la ligne "31/12" -> décembre 2025
+      } else if (moisDemandeNum === 12 && moisLigneNum === 1) {
+        annee += 1; // ex: on est en décembre 2025, la ligne "01/01" -> janvier 2026
+      }
+      // sinon (débordement de quelques jours dans le même mois voisin proche), on garde l'année telle quelle
+    }
+  }
 
   return `${annee}-${mm}-${jj}`;
 }
 
 // ---- Parse la réponse JSON de l'API en une liste plate de tirages ----
-function parseApiResponse(apiData) {
+// Structure réelle de l'API (vérifiée sur capture du 09/08/2026) :
+// apiData.drawsResultsWeekly = [
+//   { date: "dimanche 09/08", drawResults: { nightDraws: [...], standardDraws: [...] } },
+//   { date: "samedi 08/08", drawResults: {...} },
+//   ...
+// ]
+function parseApiResponse(apiData, monthYearFR) {
   const resultats = [];
 
   if (!apiData || !Array.isArray(apiData.drawsResultsWeekly)) {
     return resultats;
   }
 
-  for (const semaine of apiData.drawsResultsWeekly) {
-    const { startDate, endDate, drawResultsDaily } = semaine;
-    if (!Array.isArray(drawResultsDaily)) continue;
+  for (const jourData of apiData.drawsResultsWeekly) {
+    const dateMatch = (jourData.date || '').match(/(\d{2})\/(\d{2})/);
+    if (!dateMatch) continue;
 
-    for (const jourData of drawResultsDaily) {
-      const dateMatch = (jourData.date || '').match(/(\d{2}\/\d{2})/);
-      if (!dateMatch) continue;
+    const dateISO = resoudreDateISO(dateMatch[0], monthYearFR);
 
-      const dateISO = construireDateISO(dateMatch[1], startDate, endDate);
-      const tirages = jourData.drawResults?.standardDraws || [];
+    const nightDraws = jourData.drawResults?.nightDraws || [];
+    const standardDraws = jourData.drawResults?.standardDraws || [];
+    const tousLesTirages = [...nightDraws, ...standardDraws];
 
-      for (const t of tirages) {
-        if (!t.drawName || t.drawName === '-') continue;
-        if (!t.winningNumbers || t.winningNumbers.includes('.')) continue;
+    for (const t of tousLesTirages) {
+      if (!t.drawName || t.drawName === '-') continue;
+      if (!t.winningNumbers || t.winningNumbers.includes('.')) continue; // tirage pas encore joué
 
-        const gagnants = t.winningNumbers.split(' - ').map((n) => n.trim());
-        const machine =
-          t.machineNumbers && !t.machineNumbers.includes('.')
-            ? t.machineNumbers.split(' - ').map((n) => n.trim())
-            : [];
+      const gagnants = t.winningNumbers.split(' - ').map((n) => n.trim());
+      const machine =
+        t.machineNumbers && !t.machineNumbers.includes('.')
+          ? t.machineNumbers.split(' - ').map((n) => n.trim())
+          : [];
 
-        resultats.push({
-          date_tirage: dateISO,
-          tirage: t.drawName,
-          gagnants,
-          machine,
-        });
-      }
+      resultats.push({
+        date_tirage: dateISO,
+        tirage: t.drawName,
+        gagnants,
+        machine,
+      });
     }
   }
 
@@ -270,7 +304,7 @@ app.get('/api/resultats', async (req, res) => {
 
   try {
     const apiData = await fetchResultatsAPI(monthYear, drawType);
-    const resultats = parseApiResponse(apiData);
+    const resultats = parseApiResponse(apiData, monthYear);
 
     if (resultats.length === 0) {
       throw new Error('API a répondu mais aucun tirage exploitable trouvé');
@@ -344,7 +378,6 @@ app.get('/api/historique', async (req, res) => {
     const { data, error } = await query;
     if (error) throw error;
 
-    // Corrige le double-encodage JSON éventuel (colonne stockée en text au lieu de jsonb)
     const historique = data.map((row) => ({
       ...row,
       numeros_gagnants: parseChampJSON(row.numeros_gagnants),
