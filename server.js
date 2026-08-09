@@ -314,6 +314,20 @@ app.get('/api/resultats', async (req, res) => {
   }
 });
 
+// ---- Petit utilitaire : parse un champ qui peut être une string JSON ou déjà un tableau ----
+function parseChampJSON(valeur) {
+  if (Array.isArray(valeur)) return valeur;
+  if (typeof valeur === 'string') {
+    try {
+      const parsed = JSON.parse(valeur);
+      return Array.isArray(parsed) ? parsed : valeur;
+    } catch {
+      return valeur;
+    }
+  }
+  return valeur;
+}
+
 app.get('/api/historique', async (req, res) => {
   try {
     const { date, tirage, limit } = req.query;
@@ -330,7 +344,14 @@ app.get('/api/historique', async (req, res) => {
     const { data, error } = await query;
     if (error) throw error;
 
-    res.json({ success: true, count: data.length, historique: data });
+    // Corrige le double-encodage JSON éventuel (colonne stockée en text au lieu de jsonb)
+    const historique = data.map((row) => ({
+      ...row,
+      numeros_gagnants: parseChampJSON(row.numeros_gagnants),
+      numeros_machine: parseChampJSON(row.numeros_machine),
+    }));
+
+    res.json({ success: true, count: historique.length, historique });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
