@@ -1,7 +1,7 @@
 {
-  "name": "Lonaci Tracker Pro",
-  "short_name": "LonaciTracker",
-  "description": "Suivi et analyse des tirages LONACI Loto Bonheur",
+  "name": "AnalytixLoto Pro",
+  "short_name": "AnalytixLoto",
+  "description": "Suivi et analyse statistique des tirages loto",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
@@ -23,3 +23,4 @@
     }
   ]
 }
+
