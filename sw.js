@@ -1,7 +1,7 @@
-// Service Worker - Lonaci Tracker Pro
+// Service Worker - AnalytixLoto Pro
 // Incrémente CACHE_VERSION à chaque mise à jour pour forcer le rafraîchissement
-const CACHE_VERSION = 'v4';
-const CACHE_NAME = `lonaci-tracker-${CACHE_VERSION}`;
+const CACHE_VERSION = 'v1';
+const CACHE_NAME = `analytixloto-${CACHE_VERSION}`;
 
 const ASSETS_TO_CACHE = [
   './index.html',
