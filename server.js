@@ -1,4 +1,3 @@
-
 const crypto = require('crypto');
 const parseJourEnDate = require('./parseJourEnDate');
 const express = require('express');
@@ -267,8 +266,8 @@ app.get('/api/debug-api', async (req, res) => {
   }
 });
 
-// ---- Route principale : API en priorité, Puppeteer en fallback ----
-app.get('/api/resultats', async (req, res) => {
+// ---- Handler principal (extrait de la route pour pouvoir être branché sur 2 URLs) ----
+async function handlerResultats(req, res) {
   const monthYear = req.query.monthYear || getMonthYearFR();
   const drawType = req.query.drawType || 'Tous les tirages';
 
@@ -316,7 +315,13 @@ app.get('/api/resultats', async (req, res) => {
   } finally {
     if (page) await page.close();
   }
-});
+}
+
+// ---- Route principale (nom historique en français) ----
+app.get('/api/resultats', handlerResultats);
+
+// ---- Alias attendu par le frontend (syncFromAPI() appelle /api/results) ----
+app.get('/api/results', handlerResultats);
 
 // ---- Petit utilitaire : parse un champ qui peut être une string JSON ou déjà un tableau ----
 function parseChampJSON(valeur) {
@@ -434,3 +439,4 @@ app.post('/api/verifier-token', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Serveur démarré sur le port ${PORT}`);
 });
+                         
