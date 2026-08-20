@@ -93,6 +93,9 @@ function construireDateISO(jourMoisStr, startDateStr, endDateStr) {
 }
 
 // ---- Parse la réponse JSON de l'API en une liste plate de tirages ----
+// FIX : on itère maintenant TOUTES les catégories de tirages présentes dans
+// drawResults (standardDraws, specialDraws, etc.) au lieu de ne lire que
+// standardDraws. Ça corrige les tirages tardifs manquants (23h, 1h, 2h, 3h).
 function parseApiResponse(apiData) {
   const resultats = [];
 
@@ -109,7 +112,13 @@ function parseApiResponse(apiData) {
       if (!dateMatch) continue;
 
       const dateISO = construireDateISO(dateMatch[1], startDate, endDate);
-      const tirages = jourData.drawResults?.standardDraws || [];
+
+      // Fusionne toutes les catégories de tirages du jour (standardDraws,
+      // specialDraws, et toute autre catégorie que l'API pourrait renvoyer)
+      const drawResultsObj = jourData.drawResults || {};
+      const tirages = Object.values(drawResultsObj)
+        .filter(Array.isArray)
+        .flat();
 
       for (const t of tirages) {
         if (!t.drawName || t.drawName === '-') continue;
@@ -439,4 +448,3 @@ app.post('/api/verifier-token', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Serveur démarré sur le port ${PORT}`);
 });
-                         
