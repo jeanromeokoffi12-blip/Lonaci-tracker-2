@@ -1,47 +1,44 @@
-// Service Worker - AnalytixLoto Pro
-// Incrémente CACHE_VERSION à chaque mise à jour pour forcer le rafraîchissement
-const CACHE_VERSION = 'v1';
-const CACHE_NAME = `analytixloto-${CACHE_VERSION}`;
+// ══════════════════════════════════════
+// SERVICE WORKER — AnalytixLoto PRO
+// ⚠️ IMPORTANT : change CACHE_NAME à CHAQUE déploiement (ex: v13, v14...)
+// Sinon le navigateur pense qu'il n'y a rien de neuf et garde l'ancien cache.
+// ══════════════════════════════════════
+const CACHE_NAME = 'analytixloto-v13';
 
-const ASSETS_TO_CACHE = [
+const URLS_TO_CACHE = [
+  './',
   './index.html',
-  './manifest.json',
-  './icon-192.png',
-  './icon-512.png'
+  './manifest.json'
 ];
 
+// ── INSTALL : met en cache les fichiers de base et active tout de suite ──
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(URLS_TO_CACHE))
   );
-  self.skipWaiting();
+  self.skipWaiting(); // ⚠️ force le nouveau SW à s'activer sans attendre la fermeture des onglets
 });
 
+// ── ACTIVATE : supprime les anciens caches et prend le contrôle immédiat ──
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
+        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
       )
-    )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
+// ── FETCH : réseau d'abord, cache en secours (pour toujours avoir la dernière version quand il y a du réseau) ──
 self.addEventListener('fetch', (event) => {
-  if (!event.request.url.startsWith(self.location.origin)) {
-    return;
-  }
+  if (event.request.method !== 'GET') return;
 
   event.respondWith(
-    fetch(event.request, { cache: 'no-store' })
+    fetch(event.request)
       .then((response) => {
-        const responseClone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseClone);
-        });
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         return response;
       })
       .catch(() => caches.match(event.request))
