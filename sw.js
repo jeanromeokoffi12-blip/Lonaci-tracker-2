@@ -3,7 +3,7 @@
 // ⚠️ IMPORTANT : change CACHE_NAME à CHAQUE déploiement (ex: v13, v14...)
 // Sinon le navigateur pense qu'il n'y a rien de neuf et garde l'ancien cache.
 // ══════════════════════════════════════
-const CACHE_NAME = 'analytixloto-v13';
+const CACHE_NAME = 'analytixloto-v14';
 
 const URLS_TO_CACHE = [
   './',
