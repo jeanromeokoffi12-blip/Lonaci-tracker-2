@@ -1392,7 +1392,7 @@ window.addEventListener('appinstalled',()=>{document.getElementById('install-ban
 // SERVICE WORKER — MISE À JOUR AUTO + TOAST
 // ══════════════════════════════════════
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js').then(reg=>{
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg=>{
     reg.update();
     reg.addEventListener('updatefound',()=>{
       const newSW=reg.installing;
