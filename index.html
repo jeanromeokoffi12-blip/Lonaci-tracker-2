@@ -1398,7 +1398,11 @@ if('serviceWorker' in navigator){
       const newSW=reg.installing;
       newSW.addEventListener('statechange',()=>{
         if(newSW.state==='installed'&&navigator.serviceWorker.controller){
-          showUpdateToast();
+          document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible' && navigator.serviceWorker.controller){
+    navigator.serviceWorker.getRegistration().then(reg => reg && reg.update());
+  }
+});functionshowUpdateToast();
         }
       });
     });
