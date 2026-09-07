@@ -18,3 +18,7 @@
     "ws": "^8.18.0"
   }
 }
+"dependencies": {
+  "express-rate-limit": "^7.4.0",
+  ...
+}
