@@ -15,10 +15,7 @@
     "@supabase/supabase-js": "^2.45.0",
     "puppeteer-core": "^22.0.0",
     "@sparticuz/chromium": "^127.0.0",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "express-rate-limit": "^7.4.0"
   }
-}
-"dependencies": {
-  "express-rate-limit": "^7.4.0",
-  ...
 }
